@@ -1,0 +1,14 @@
+gem5 Simulator System.  http://gem5.org
+gem5 is copyrighted software; use the --copyright option for details.
+
+gem5 version 21.1.0.2
+gem5 compiled Jan 22 2024 18:57:14
+gem5 started Jan 23 2024 14:45:23
+gem5 executing on vnicolas-B560M-DS3H-V2, pid 1466019
+command line: /home/vnicolas/Workspace/repos/ruben/gem5/build/X86_MESI_Three_Level_HTM_umu/gem5.opt --outdir=/home/vnicolas/Workspace/repos/ruben/gem5/gem5_path/x86_64/checkpoints/booted/16_cores --redirect-stdout --redirect-stderr /home/vnicolas/Workspace/repos/ruben/gem5/configs/example/fs.py --num-cpus=16 --mem-size=8GB --cpu-type=X86KvmCPU --checkpoint-dir=/home/vnicolas/Workspace/repos/ruben/gem5/gem5_path/x86_64/checkpoints/booted/16_cores --kernel=/home/vnicolas/Workspace/repos/ruben/gem5/gem5_path/x86_64/binaries/vmlinux-5.4.49 --disk-image=/home/vnicolas/Workspace/repos/ruben/gem5/gem5_path/x86_64/disks/ubuntu-18-04.img --root-device=/dev/hda1 --disk-image=/home/vnicolas/Workspace/repos/ruben/gem5/gem5_path/x86_64/disks/benchmarks-x86_64.img --script=/home/vnicolas/Workspace/repos/ruben/gem5/gem5_path/scripts/hack_back_ckpt_caps.rcS
+
+Global frequency set at 1000000000000 ticks per second
+      0: system.pc.south_bridge.cmos.rtc: Real-time clock set to Sun Jan  1 00:00:00 2012
+**** REAL SIMULATION ****
+Writing checkpoint
+Exiting @ tick 32159261661000 because m5_exit instruction encountered

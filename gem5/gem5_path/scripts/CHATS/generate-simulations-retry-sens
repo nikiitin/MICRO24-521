@@ -1,0 +1,32 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+SCRIPT_COMMAND="$0"
+set -o nounset
+set -o pipefail
+set -o errexit
+trap 'echo "$SCRIPT_COMMAND: error $? at line $LINENO"' ERR
+
+CONFIG_FILE="$SCRIPT_DIR/config.chats.retry.sensibility.py"
+
+GEN_SCRIPTS="$SCRIPT_DIR/../run-scripts/gem5_gen_scripts.py" 
+GEN_SCRIPTS_ARGS=("--config-file" "$CONFIG_FILE")
+
+if [[ "$#" = 1 && ( "$1" = "-q" || "$1" = "--enqueue" )]] ; then
+    GEN_SCRIPTS_ARGS=("${GEN_SCRIPTS_ARGS[@]}" "--enqueue" )
+elif [[ "$#" = 0 ]] ; then
+    : # only generate
+else
+    echo "Only argument supported is -q or --enqueue to enqueue."
+    exit 1
+fi
+
+# This environment variable is used by $CONFIG_FILE
+export OUTPUT_DIR="${OUTPUT_DIR:-$(realpath "$SCRIPT_DIR/../../../results/chats-retry-sens")}"
+
+[[ -n "${OUTPUT_DIR:-}" && -e "$OUTPUT_DIR" ]] && {
+    echo "Output directory «$OUTPUT_DIR» already exists. Delete it or use another."
+    exit 1;
+}
+
+"$GEN_SCRIPTS" "${GEN_SCRIPTS_ARGS[@]}" "$@"

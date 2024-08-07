@@ -1,0 +1,364 @@
+warn: Physical memory size specified is 8GB which is greater than 3GB.  Twice the number of memory controllers would be created.
+warn: iobus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: bridge.master is deprecated. `master` is now called `mem_side_port`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: bridge.slave is deprecated. `slave` is now called `cpu_side_port`
+warn: iobus.master is deprecated. `master` is now called `mem_side_ports`
+warn: apicbridge.slave is deprecated. `slave` is now called `cpu_side_port`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: apicbridge.master is deprecated. `master` is now called `mem_side_port`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: iobus.master is deprecated. `master` is now called `mem_side_ports`
+warn: iobridge.slave is deprecated. `slave` is now called `cpu_side_port`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: iobridge.master is deprecated. `master` is now called `mem_side_port`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.master is deprecated. `master` is now called `mem_side_ports`
+warn: membus.slave is deprecated. `slave` is now called `cpu_side_ports`
+warn: system.workload.acpi_description_table_pointer.rsdt adopting orphan SimObject param 'entries'
+warn: No dot file generated. Please install pydot to generate the dot file and pdf.
+build/X86_MESI_Three_Level_HTM_umu/mem/mem_interface.cc:791: warn: DRAM device capacity (8192 Mbytes) does not match the address range assigned (4096 Mbytes)
+build/X86_MESI_Three_Level_HTM_umu/sim/kernel_workload.cc:46: info: kernel located at: /home/vnicolas/Workspace/repos/ruben/gem5/gem5_path/x86_64/binaries/vmlinux-5.4.49
+system.pc.com_1.device: Listening for connections on port 3456
+0: system.remote_gdb: listening for remote gdb on port 7000
+build/X86_MESI_Three_Level_HTM_umu/mem/coherent_xbar.cc:140: warn: CoherentXBar system.membus has no snooping ports attached!
+build/X86_MESI_Three_Level_HTM_umu/dev/intel_8254_timer.cc:125: warn: Reading current count from inactive timer.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:153: info: KVM: Coalesced MMIO disabled by config.
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 2
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 3
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 4
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 5
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 6
+build/X86_MESI_Three_Level_HTM_umu/arch/x86/cpuid.cc:180: warn: x86 cpuid family 0x0000: unimplemented function 8
+build/X86_MESI_Three_Level_HTM_umu/sim/simulate.cc:107: info: Entering event queue @ 0.  Starting simulation...
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:476: warn: ldt: Illegal segment type (0)
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ldt: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:1556: warn: kvm-x86: MSR (0x3a) unsupported by gem5. Skipping.
+build/X86_MESI_Three_Level_HTM_umu/dev/x86/pc.cc:117: warn: Don't know what interrupt to clear for console.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:521: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+build/X86_MESI_Three_Level_HTM_umu/dev/x86/pc.cc:130: warn: Tried to clear PCI interrupt 14
+build/X86_MESI_Three_Level_HTM_umu/mem/port.cc:200: warn: Port system.iobridge.cpu_side_port doesn't support requesting a back door.
+build/X86_MESI_Three_Level_HTM_umu/dev/x86/i8042.cc:280: warn: Write to unknown i8042 (keyboard controller) command port.
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: ds: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ds: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: es: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: es: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: fs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: fs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: gs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: gs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:476: warn: ldt: Illegal segment type (0)
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ldt: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: ds: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ds: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: es: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: es: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: fs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: fs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: gs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: gs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:476: warn: ldt: Illegal segment type (0)
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ldt: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: ds: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ds: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: es: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: es: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: fs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: fs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: gs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: gs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:476: warn: ldt: Illegal segment type (0)
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ldt: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/sim/simulate.cc:107: info: Entering event queue @ 24733575113500.  Starting simulation...
+build/X86_MESI_Three_Level_HTM_umu/sim/simulate.cc:107: info: Entering event queue @ 24734609245500.  Starting simulation...
+build/X86_MESI_Three_Level_HTM_umu/sim/simulate.cc:107: info: Entering event queue @ 24735614672000.  Starting simulation...
+build/X86_MESI_Three_Level_HTM_umu/sim/simulate.cc:107: info: Entering event queue @ 24736669106500.  Starting simulation...
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: ds: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ds: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: es: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: es: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: fs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: fs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: gs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: gs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:476: warn: ldt: Illegal segment type (0)
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ldt: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: ds: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ds: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: es: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: es: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: fs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: fs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: gs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: gs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:476: warn: ldt: Illegal segment type (0)
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ldt: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: ds: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ds: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: es: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: es: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: fs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: fs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:491: warn: gs: S flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: gs: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:476: warn: ldt: Illegal segment type (0)
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/x86_cpu.cc:517: warn: ldt: P flag not set
+build/X86_MESI_Three_Level_HTM_umu/cpu/kvm/base.cc:572: hack: Pretending totalOps is equivalent to totalInsts()
