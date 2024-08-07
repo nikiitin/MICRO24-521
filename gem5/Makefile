@@ -2,7 +2,6 @@
 # folder so DO NOT CALL MAKE HERE!.
 
 # Variables
-GEM5_PATH = ./gem5
 GEM5_DEPENDENCIES_URL = https://univmurcia-my.sharepoint.com/:u:/g/personal/victor_nicolasc_um_es/EZ4ZYu33sepFsx3oHpQhw2ABQ1OHGb4ZQ8jT77JXG-Objg?e=Tqv8UA&download=1
 GEM5_DEPENDENCIES_PATH = ./dependencies
 build_dependencies: download_dependencies install
@@ -30,7 +29,7 @@ unpack_dependencies:
 
 unpack_modules:
 	@echo "Unpacking linux modules for ubuntu 20.04 container..."
-	@tar -xzvf "$(GEM5_DEPENDENCIES_PATH)/dockerfiles/modules.tar.gz" -C $(GEM5_PATH)/dockerfiles
+	@tar -xzvf "$(GEM5_DEPENDENCIES_PATH)/dockerfiles/modules.tar.gz" -C ./dockerfiles
 	@echo "Modules unpacked!"
 	@echo "Removing tar file..."
 	@rm -f "$(GEM5_DEPENDENCIES_PATH)/dockerfiles/modules.tar.gz"
@@ -38,4 +37,4 @@ unpack_modules:
 
 install_dependencies:
 	@echo "Installing dependencies for gem5..."
-	@mv $(GEM5_DEPENDENCIES_PATH)/gem5_path/* $(GEM5_PATH)/gem5_path/
+	@mv $(GEM5_DEPENDENCIES_PATH)/gem5_path/* ./gem5_path/
