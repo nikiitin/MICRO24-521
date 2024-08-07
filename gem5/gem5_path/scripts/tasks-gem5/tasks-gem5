@@ -1,0 +1,58 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(dirname "$(readlink -fm "$0")")"
+. "${SCRIPT_DIR}/tasks-gem5-common.sh"
+. "${SCRIPT_DIR}/tasks-gem5.defaults.config"
+
+# Tasks are registered with declare_task in *.task.sh files
+for t in "$SCRIPT_DIR"/*.task.sh ; do . "${t}" ; done
+
+help() {
+    echo "Use: $0 TASK [OPTIONS]..."
+    echo ""
+    echo "Where TASK can be any of the following:"
+    for t in ${TASKS[@]} ; do
+        echo "    $t: ${TASK_HELP[$t]}"
+    done
+
+    echo "
+    Configuration will be read from '${SCRIPT_DIR}/tasks-gem5.defaults.config' and '${SCRIPT_DIR}/tasks-gem5.config'.
+
+    After configuration, the usual order of tasks is as follows:
+        get-base-resources, build, build-benchmarks, update-benchmarks-image, create-boot-checkpoints, generate-simulation-scripts
+
+    Simulation status can be monitored with ${GEM5_ROOT}/gem5_path/scripts/check_simulations.sh
+    
+    Prerequisites:
+     - Native GCC (x86_64) for Gem5 and x86_64 benchmarks (tested with GCC 9.2.0).
+     - GCC cross compiler for ARM (tested with GCC 10.2.0).
+     - scons and python 3.
+     - Link to the STAMP repository in '${GEM5_ROOT}/gem5_path/benchmarks/benchmarks-htm/stamp' (or disable STAMP).
+     - Link to the PARSEC repository in '${GEM5_ROOT}/gem5_path/benchmarks/parsec' (or disable PARSEC).
+     - Link to the HTMBench repository in '${GEM5_ROOT}/gem5_path/benchmarks/benchmarks-htm/HTMBench' (or disable HTMBench).
+     - Link to the Splash-3 repository in '${GEM5_ROOT}/gem5_path/benchmarks/Splash-3' (or disable Splash-3).
+"
+}
+
+if [ -e "${SCRIPT_DIR}/tasks-gem5.config" ] ; then 
+    . "${SCRIPT_DIR}/tasks-gem5.config"
+else
+    help
+    error_and_exit "Configuration file not found at '${SCRIPT_DIR}/tasks-gem5.config'."$'\n'"You may want to create it using '${SCRIPT_DIR}/tasks-gem5.template.config as a starting point."
+fi
+
+if [[ $# -eq 0 ]] ; then
+    help
+    exit 0
+fi
+
+TASK="$1"
+shift
+
+if is_known_task "$TASK" ; then
+    task_"$TASK" "$@"
+else
+    echo "$(color red "Unkown task '$TASK'.")" 1>&2
+    help
+    exit 1
+fi

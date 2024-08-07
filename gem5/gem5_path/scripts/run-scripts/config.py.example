@@ -1,0 +1,92 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
+from gem5_run import configs_set, configs_update, configs_vary, Vary, get_benchmarks
+from options import *
+import templates
+
+#
+# Example config file for gem5_gen_scripts
+#
+# A configuration is a mapping of options to values represented by a
+# python dictionary object. The gem5_gen_scripts program will generate
+# a script for each configuration included in the global config list,
+# which should be created a configuration file (e.g., this file) using
+# the following functions: configs_set, configs_update and configs_vary.
+#
+# All the available options are defined in options.py, and the file
+# templates.py provides default values for every option and several
+# templates (configuration fragments) that can be combined.
+#
+# The global configuration list can be printed (instead of generating
+# the simulation scripts) using --list (full list) and --list-mixed
+# (abbreviated list).
+#
+# This file is an example showcasing some ways to build the global
+# list of configurations to be simulated.
+#
+
+# First, create a new global list of configs. In this case, it
+# contains only one element, templates.base, which is defined in
+# templates.py and contains all required options for a minimal
+# configuration. Many of the values defined by this tamplate are taken
+# from the configuration of tasks-gem5. The values defined in the
+# template can be overriden later.
+configs_set(templates.base)
+
+# Modify every configuration in the config list (only one in this
+# example) according to a template. In this case, we set the default
+# cache options.
+configs_update(templates.cache_baseline) 
+
+# Alternatively, we could use configs_vary to try several cache
+# configurations. This function will, for each configuration in the
+# global list, create as many variants as arguments. Each variant will
+# be the result of updating the configuration with the options defined
+# by the corresponding argument. Note that the number of
+# configurations in the list will be multiplied by the number of
+# arguments to configs_vary.
+#
+#  configs_vary(templates.cache_baseline,
+#               templates.cache_small,
+#               templates.cache_test) 
+ 
+
+# Use configs_vary to combine the configuration (or configurations)
+# defined until now with each of the HTM configuration templates
+# defined in templates.py. 
+configs_vary(
+    templates.htm_cfg1_base,
+    templates.htm_cfg1_pf,
+)
+
+# Use configs_update to set some common values for all the
+# configurations defined until now.
+configs_update({
+    cpu_model: "TimingSimpleCPU", # Previously was DerivO3CPU (the default defined un templates.base)
+
+    build_type: "opt", # Set binary_type (the dafult comes from tasks-gem5 and may include several values using Vary)
+    htm_visualizer: False,
+
+    # “Vary” values can be used to test several values for a single
+    # option. A different configuration will be created for each value
+    # given to Value before generating the scripts or listing the
+    # configurations. It is almost equivalent to using
+    # configs_vary. In this case, vary the number of processors.
+    num_cpus: Vary(1, 2, 4, 8, 16),
+
+    # Benchmarks are specified via the Benchmark class. The list of
+    # available benchmarks is defined in benchmarks.py. A list of
+    # benchmarks satisfying some conditions can be obtained with
+    # get_benchmarks. In the following line, we obtain the list of
+    # benchmarks comprising intruder and yada from stamp, using both
+    # the small and medium sizes, and then use it as argument to Vary
+    # to define the value of the “benchmark” option.
+    benchmark: Vary(*get_benchmarks(suite = "stamp",
+                                    size = ["small", "medium"],
+                                    name = ["intruder", "yada"])),
+
+    # Use three random seeds 
+    random_seed: Vary(0, 1, 2), # Alternatively: Vary(*range(3)),
+})
+

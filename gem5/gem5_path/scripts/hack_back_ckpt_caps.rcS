@@ -1,0 +1,62 @@
+#!/bin/bash
+### @hack_back_ckpt@ ###
+#
+# Author:
+#   Rubén Titos
+#
+
+# Test if the CHECKPOINT_WRITTEN environment variable is already set
+if [ "${CHECKPOINT_WRITTEN+set}" != set ]
+then
+        # Checkpoint the first execution
+        echo "Checkpointing simulation..."
+        sync
+        sleep 5
+        /sbin/m5 checkpoint
+	export CHECKPOINT_WRITTEN=1
+else
+    # We've already executed once, so we should exit
+    echo "hack_back_ckpt already executed once. Exiting..."
+    sleep 5
+    /sbin/m5 exit
+fi
+
+
+# Test if we previously okayed ourselves to run this script
+if [ "$CHECKPOINT_WRITTEN" -eq 1 ]
+then
+
+	# Read the script for the checkpoint restored execution
+	echo "Loading new script..."
+	/sbin/m5 readfile > /tmp/runscript
+	chmod 755 /tmp/runscript
+	# Execute the new runscript
+	if [ -s /tmp/runscript ]
+	then
+	    # Sanity checks
+            LAUNCHSCRIPT_MARK=$(head -n2 /tmp/runscript | grep "^### @launchscript@ ###" | wc -l)
+	    if [ "$LAUNCHSCRIPT_MARK" -eq 1 ]
+            then
+		exec /tmp/runscript
+            else
+                HACKBACKCKPT_MARK=$(head -n2 /tmp/runscript | grep "^### @hack_back_ckpt@ ###" | wc -l)
+	        if [ "$HACKBACKCKPT_MARK" -eq 0 ]
+                then
+		    echo "Unexpected script found!"
+                    cat  /tmp/runscript
+                else
+                    echo -n "m5 readfile read this same script (hack_back_ckpt.rcS)"
+                    echo " after writing boot checkpoint."
+                    echo -n "Re-executing this script recursively with"
+                    echo " CHECKPOINT_WRITTEN=1 will exit simulation..."
+		    exec /tmp/runscript
+                fi
+            fi
+	else
+	    echo "Script not specified. Dropping into shell..."
+	    /bin/bash
+	fi
+fi
+echo "End of hack_back_ckpt. Should never get this far!"
+while true; do echo -n ; done
+#/sbin/m5 exit

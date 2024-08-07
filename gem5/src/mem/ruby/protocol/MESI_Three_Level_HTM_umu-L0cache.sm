@@ -1,0 +1,2400 @@
+/*
+ * Copyright (C) 2021 Rubén Titos <rtitos@um.es>
+ * Universidad de Murcia
+ *
+ * Copyright (c) 2020 ARM Limited
+ * All rights reserved
+ *
+ * The license below extends only to copyright in the software and shall
+ * not be construed as granting a license to any other intellectual
+ * property including but not limited to intellectual property relating
+ * to a hardware implementation of the functionality of the software
+ * licensed hereunder.  You may use the software subject to the license
+ * terms below provided that you ensure that this notice is replicated
+ * unmodified and in its entirety in all distributions of the software,
+ * modified or unmodified, in source code or in binary form.
+ *
+ * Copyright (c) 2013 Mark D. Hill and David A. Wood
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met: redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer;
+ * redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution;
+ * neither the name of the copyright holders nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+ : TransactionalSequencer * sequencer;
+   CacheMemory * Icache;
+   CacheMemory * Dcache;
+   TransactionInterfaceManager * xact_mgr;
+   bool send_evictions;
+
+   RubyPrefetcher * prefetcher;
+   bool enable_prefetch := "False";
+
+   // From this node's L0 cache to the network
+   MessageBuffer * bufferToL1, network="To";
+
+   // To this node's L0 cache FROM the network
+   MessageBuffer * bufferFromL1, network="From";
+
+   // Message queue between this controller and the processor
+   MessageBuffer * mandatoryQueue;
+
+   // Request Buffer for prefetches
+   MessageBuffer * prefetchQueue;
+{
+  // STATES
+  state_declaration(State, desc="Cache states", default="L0Cache_State_I") {
+    // Base states
+
+    // The cache entry has not been allocated.
+    I, AccessPermission:Invalid, desc="Invalid";
+
+    // The cache entry is in shared mode. The processor can read this entry
+    // but it cannot write to it.
+    S, AccessPermission:Read_Only, desc="Shared";
+
+    // The cache entry is in exclusive mode. The processor can read this
+    // entry. It can write to this entry without informing the directory.
+    // On writing, the entry moves to M state.
+    E, AccessPermission:Read_Only, desc="Exclusive";
+
+    // The processor has read and write permissions on this entry.
+    M, AccessPermission:Read_Write, desc="Modified";
+
+    // The processor has read and write permissions on this entry,
+    // which will be shortly discarded by transactional abort
+    MD, AccessPermission:Read_Write, desc="Modified, pending discard";
+
+    FD, AccessPermission:Read_Write, desc="Forwarded data for value prediction, dirty, needs validation";
+    FD_V, AccessPermission:Read_Write, desc="Forwarded data for value prediction, in validation";
+    // Transient States
+
+    // The cache controller has requested an instruction.  It will be stored
+    // in the shared state so that the processor can read it.
+    Inst_IS, AccessPermission:Busy, desc="Issued GETS, have not seen response yet";
+
+    // The cache controller has requested that this entry be fetched in
+    // shared state so that the processor can read it.
+    IS, AccessPermission:Busy, desc="Issued GETS, have not seen response yet";
+
+    // The cache controller has requested that this entry be fetched in
+    // modify state so that the processor can read/write it.
+    IM, AccessPermission:Busy, desc="Issued GETX, have not seen response yet";
+
+    // The cache controller had read permission over the entry. But now the
+    // processor needs to write to it. So, the controller has requested for
+    // write permission.
+    SM, AccessPermission:Read_Only, desc="Issued GETX, have not seen response yet";
+
+    // Transient states in which block is being prefetched
+    PF_Inst_IS, AccessPermission:Busy, desc="Issued GETS, have not seen response yet";
+    PF_IS, AccessPermission:Busy, desc="Issued GETS, have not seen response yet";
+    PF_IE, AccessPermission:Busy, desc="Issued GETX, have not seen response yet";
+  }
+
+  // EVENTS
+  enumeration(Event, desc="Cache events") {
+    // Events from core
+    Load,            desc="Load request from the home processor";
+    Ifetch,          desc="I-fetch request from the home processor";
+    Store,           desc="Store request from the home processor";
+    FirstTxStore,    desc="First transactional store request from the home processor";
+
+    // invalidations from L1 (due to self or other core)
+    InvOwn,          desc="Invalidate request from L1 (own)";
+    InvElse,         desc="Invalidate request from L1 (else)";
+    Inv_Discard, desc="Invalidate request from L1 (own/else), must discard trans. modified data";
+    InvOwn_Rset,     desc="Invalidate request from L1 (own), can evict trans. read data";
+    InvOwn_Wset,     desc="Invalidate request from L1 (own), can evict trans. modified data";
+    InvOwn_X,       desc="Invalidate request from L1 (own), must nack";
+    InvElse_X,       desc="Invalidate request from L1 (else), must nack";
+
+    // internal generated request
+    L0_Replacement,  desc="L0 Replacement", format="!r";
+    L0_Replacement_Wset_Discard,  desc="L1 Replacement, data is speculatively modified, do not writeback", format="!r";
+    L0_Replacement_Wset,  desc="L1 Replacement, data is speculatively modified, allowed to writeback but retain exclusive", format="!r";
+    L0_Replacement_Rset,  desc="L1 Replacement, data is speculatively read, eviction allowed (signature), do not writeback", format="!r";
+
+    // requests forwarded from other processors
+    Fwd_GETX,   desc="GETX from other processor";
+    Fwd_TGETX,  desc="GETX from other processor, transactional";
+    Fwd_TGETX_X,   desc="GETS from other processor, trans. conflict";
+    Fwd_GETS,   desc="GETS from other processor";
+    Fwd_GET_INSTR,   desc="GET_INSTR from other processor";
+    Fwd_GETX_X,   desc="GETX from other processor, trans. conflict";
+    Fwd_GETS_X,   desc="GETS from other processor, trans. conflict";
+    Fwd_GETS_Discard,   desc="GETS from other processor, trans.conflict, yield";
+    Fwd_GETX_Discard,   desc="GETS from other processor, trans.conflict, yield";
+    Fwd_TGETX_Discard,   desc="GETS from other processor, trans.conflict, yield";
+    Fwd_GET_YieldInvalid,   desc="GETS from other processor, trans.conflict, yield";
+
+    // data arrives from L1 cache
+    Data,               desc="Data for processor";
+    Data_Exclusive,     desc="Data for processor";
+    Data_Stale_HtmReload, desc="Data for processor, but not for storage";
+    Data_Stale,         desc="Data for processor, but not for storage";
+    Data_Invalid,       desc="Data for processor, data is invalid, must refetch from mem";
+
+    Ack,        desc="Ack for processor";
+    Nack,        desc="Ack for processor";
+    Nack_Spec,  desc="Nack for processor, with data";
+    Nack_Spec_Illegal_Rtry, desc="Nack for processor, with illegal data. Has to retry";
+
+    WB_Ack,        desc="Ack for replacement";
+
+    Failed_SC,        desc="Store conditional request that will fail";
+
+    // Prefetch events (generated by prefetcher)
+    PF_L0_Replacement, desc="L0 Replacement caused by pretcher", format="!pr";
+    PF_Load,         desc="Load request from prefetcher";
+    PF_Ifetch,       desc="Instruction fetch request from prefetcher";
+    PF_Store,        desc="Exclusive load request from prefetcher";
+    PF_Bad_Addr,     desc="Throw away prefetch request due to bad address generation";
+
+    ConsumerValidation,  desc="Consumer validation, needs exclusive permissions";
+    Nack_illegal,        desc="Received nack is illegal, actions to be taken";
+    }
+
+  // TYPES
+
+  // CacheEntry
+  structure(Entry, desc="...", interface="AbstractCacheEntry" ) {
+    State CacheState,        desc="cache state";
+    DataBlock DataBlk,       desc="data for the block";
+    bool Dirty, default="false",   desc="data is dirty";
+    bool isPrefetched, default="false", desc="Set if this block was prefetched";
+
+    bool getHtmLogPending(), external="yes";
+    // override invalidateEntry
+    void invalidateEntry() {
+      CacheState := State:I;
+      Dirty := false;
+    }
+  }
+
+  // TBE fields
+  structure(TBE, desc="...") {
+    Addr addr,              desc="Physical address for this TBE";
+    State TBEState,        desc="Transient state";
+    DataBlock DataBlk,                desc="Buffer for the data block";
+    bool Dirty, default="false",   desc="data is dirty";
+    int pendingAcks, default="0", desc="number of pending acks";
+    bool HtmFromTransaction, default="false", desc="is this a transactional load";
+    bool HtmReloadIfStale, default="false", desc="Allowed to reload upon Data_Stale";
+    bool HtmReloadIfIllegal, default="false", desc="Allowed to reload upon illegal fwd data";
+    int  HtmNumReloads, default="0", desc="Number of reloads upon Data_Stale";
+    int  HtmNumReloadsIllegal, default="0", desc="Number of reloads upon illegal fowrward data";
+ }
+
+  structure(TBETable, external="yes") {
+    TBE lookup(Addr);
+    void allocate(Addr);
+    void deallocate(Addr);
+    bool isPresent(Addr);
+    TBE getNullEntry();
+  }
+
+  TBETable TBEs, template="<L0Cache_TBE>", constructor="m_number_of_TBEs";
+
+  Tick clockEdge();
+  Cycles ticksToCycles(Tick t);
+  void set_cache_entry(AbstractCacheEntry a);
+  void unset_cache_entry();
+  void set_tbe(TBE a);
+  void unset_tbe();
+  void wakeUpBuffers(Addr a);
+  void wakeUpAllBuffers(Addr a);
+  void profileMsgDelay(int virtualNetworkType, Cycles c);
+  MachineID mapAddressToMachine(Addr addr, MachineType mtype);
+  Cycles curCycle();
+
+  // inclusive cache returns L0 entries only
+  Entry getCacheEntry(Addr addr), return_by_pointer="yes" {
+    Entry Dcache_entry := static_cast(Entry, "pointer", Dcache[addr]);
+    if(is_valid(Dcache_entry)) {
+      return Dcache_entry;
+    }
+
+    Entry Icache_entry := static_cast(Entry, "pointer", Icache[addr]);
+    return Icache_entry;
+  }
+
+  Entry getDCacheEntry(Addr addr), return_by_pointer="yes" {
+    Entry Dcache_entry := static_cast(Entry, "pointer", Dcache[addr]);
+    return Dcache_entry;
+  }
+
+  Entry getICacheEntry(Addr addr), return_by_pointer="yes" {
+    Entry Icache_entry := static_cast(Entry, "pointer", Icache[addr]);
+    return Icache_entry;
+  }
+
+  State getState(TBE tbe, Entry cache_entry, Addr addr) {
+    assert((Dcache.isTagPresent(addr) && Icache.isTagPresent(addr)) == false);
+
+    if(is_valid(tbe)) {
+      return tbe.TBEState;
+    } else if (is_valid(cache_entry)) {
+      return cache_entry.CacheState;
+    }
+    return State:I;
+  }
+
+  void setState(TBE tbe, Entry cache_entry, Addr addr, State state) {
+    assert((Dcache.isTagPresent(addr) && Icache.isTagPresent(addr)) == false);
+
+    // MUST CHANGE
+    if(is_valid(tbe)) {
+      tbe.TBEState := state;
+    }
+
+    if (is_valid(cache_entry)) {
+      cache_entry.CacheState := state;
+    }
+  }
+
+  AccessPermission getAccessPermission(Addr addr) {
+    TBE tbe := TBEs[addr];
+    if(is_valid(tbe)) {
+      DPRINTF(RubySlicc, "%s\n", L0Cache_State_to_permission(tbe.TBEState));
+      return L0Cache_State_to_permission(tbe.TBEState);
+    }
+
+    Entry cache_entry := getCacheEntry(addr);
+    if(is_valid(cache_entry)) {
+      DPRINTF(RubySlicc, "%s\n", L0Cache_State_to_permission(cache_entry.CacheState));
+      return L0Cache_State_to_permission(cache_entry.CacheState);
+    }
+
+    DPRINTF(RubySlicc, "%s\n", AccessPermission:NotPresent);
+    return AccessPermission:NotPresent;
+  }
+
+  void functionalRead(Addr addr, Packet *pkt) {
+    TBE tbe := TBEs[addr];
+    if(is_valid(tbe)) {
+      testAndRead(addr, tbe.DataBlk, pkt);
+    } else {
+      testAndRead(addr, getCacheEntry(addr).DataBlk, pkt);
+    }
+  }
+
+  int functionalWrite(Addr addr, Packet *pkt) {
+    int num_functional_writes := 0;
+
+    TBE tbe := TBEs[addr];
+    if(is_valid(tbe)) {
+      num_functional_writes := num_functional_writes +
+        testAndWrite(addr, tbe.DataBlk, pkt);
+      return num_functional_writes;
+    }
+
+    num_functional_writes := num_functional_writes +
+        testAndWrite(addr, getCacheEntry(addr).DataBlk, pkt);
+    return num_functional_writes;
+  }
+
+  void setAccessPermission(Entry cache_entry, Addr addr, State state) {
+    if (is_valid(cache_entry)) {
+      cache_entry.changePermission(L0Cache_State_to_permission(state));
+    }
+  }
+
+  Event mandatory_request_type_to_event(RubyRequestType type, Addr addr, bool transactional) {
+    if (type == RubyRequestType:HTM_Validate) {
+        return Event:ConsumerValidation;
+    } else
+    if (type == RubyRequestType:LD) {
+      return Event:Load;
+    } else if (type == RubyRequestType:IFETCH) {
+      return Event:Ifetch;
+    } else if ((type == RubyRequestType:ST) || (type == RubyRequestType:ATOMIC)
+               || (type == RubyRequestType:Store_Conditional)) {
+        if ((transactional) &&
+            xact_mgr.checkWriteSignature(addr) == false &&
+            xact_mgr.config_lazyVM()) {
+            // If using caches to buffer speculative updates (lazyVM),
+            // first transactional store must writeback to L2 in order
+            // to preserve consistent values in case of abort
+            return Event:FirstTxStore;
+        }
+      return Event:Store;
+    } else {
+      error("Invalid RubyRequestType");
+    }
+  }
+
+  Event prefetch_request_type_to_event(RubyRequestType type) {
+    if (type == RubyRequestType:LD) {
+      return Event:PF_Load;
+    } else if (type == RubyRequestType:IFETCH) {
+      return Event:PF_Ifetch;
+    } else if (type == RubyRequestType:ST) {
+      return Event:PF_Store;
+    } else {
+      error("Invalid RubyRequestType");
+    }
+  }
+
+  int getPendingAcks(TBE tbe) {
+    return tbe.pendingAcks;
+  }
+
+  bool isTransactionalMsg(TransactionBit trans) {
+    return trans != TransactionBit:NonTrans;
+  }
+
+  TransactionBit getTransactionBit() {
+      return xact_mgr.getTransactionBit();
+  }
+
+  int getTransactionPriority() {
+    return xact_mgr.getTransactionPriority();
+  }
+
+  bool shouldNackLoad(Addr addr, MachineID remote_id,
+                      Cycles remote_timestamp,
+                      TransactionBit remote_transactional,
+                      int remote_priority,
+                      bool sw_remote_priority){
+      assert(machineIDToMachineType(remote_id) == MachineType:L1Cache);
+      return xact_mgr.shouldNackLoad(addr, remote_id,
+                                     remote_timestamp,
+                                     remote_transactional,
+                                     remote_priority,
+                                     sw_remote_priority);
+  }
+
+  bool shouldNackStore(Addr addr, MachineID remote_id,
+                       Cycles remote_timestamp,
+                       TransactionBit remote_transactional,
+                       int remote_priority,
+                       bool sw_remote_priority,
+                       bool local_is_exclusive){
+      // May get INVs coming from replacements
+      return xact_mgr.shouldNackStore(addr, remote_id,
+                                      remote_timestamp,
+                                      remote_transactional,
+                                      remote_priority,
+                                      sw_remote_priority,
+                                      local_is_exclusive);
+  }
+
+  bool shouldSendDataToRequestor(Addr addr){
+      return !xact_mgr.checkWriteSignature(addr);
+  }
+
+  out_port(requestNetwork_out, CoherenceMsg, bufferToL1);
+  out_port(optionalQueue_out, RubyRequest, prefetchQueue);
+
+  void enqueuePrefetch(Addr address, RubyRequestType type, bool trans) {
+    enqueue(optionalQueue_out, RubyRequest, 1) {
+      out_msg.LineAddress := address;
+      out_msg.Type := type;
+      out_msg.Prefetch := PrefetchBit:Yes;
+      out_msg.AccessMode := RubyAccessMode:Supervisor;
+        if (trans) {
+          out_msg.htmFromTransaction := true;
+        }
+        else {
+          out_msg.htmFromTransaction := false;
+        }
+    }
+  }
+
+  // Prefetch queue between the controller and the prefetcher
+  // As per Spracklen et al. (HPCA 2005), the prefetch queue should be
+  // implemented as a LIFO structure.  The structure would allow for fast
+  // searches of all entries in the queue, not just the head msg. All
+  // msgs in the structure can be invalidated if a demand miss matches.
+  in_port(optionalQueue_in, RubyRequest, prefetchQueue, desc="...", rank = 2) {
+    if (optionalQueue_in.isReady(clockEdge())) {
+      peek(optionalQueue_in, RubyRequest) {
+        // first check for valid address
+        MachineID mid := mapAddressToMachine(in_msg.LineAddress, MachineType:Directory);
+        NodeID nid := machineIDToNodeID(mid);
+        int nidint := IDToInt(nid);
+        int numDirs := machineCount(MachineType:Directory);
+        if (nidint >= numDirs) {
+          Entry cache_entry := static_cast(Entry, "pointer", Dcache.getNullEntry());
+          TBE tbe := TBEs.getNullEntry();
+          trigger(Event:PF_Bad_Addr, in_msg.LineAddress, cache_entry, tbe);
+        } else if (in_msg.Type == RubyRequestType:IFETCH) {
+          // Instruction Prefetch
+          Entry icache_entry := getICacheEntry(in_msg.LineAddress);
+          if (is_valid(icache_entry)) {
+            // The block to be prefetched is already present in the
+            // cache. This request will be made benign and cause the
+            // prefetch queue to be popped.
+            trigger(prefetch_request_type_to_event(in_msg.Type),
+                    in_msg.LineAddress,
+                    icache_entry, TBEs[in_msg.LineAddress]);
+          }
+
+          // Check to see if it is in the L0-D
+          Entry cache_entry := getDCacheEntry(in_msg.LineAddress);
+          if (is_valid(cache_entry)) {
+            // The block is in the wrong L0 cache. We should drop
+            // this request.
+            trigger(prefetch_request_type_to_event(in_msg.Type),
+                    in_msg.LineAddress,
+                    cache_entry, TBEs[in_msg.LineAddress]);
+          }
+
+          if (Icache.cacheAvail(in_msg.LineAddress)) {
+            // L0-I does't have the line, but we have space for it
+            // in the L0-I so let's see if the L1 has it
+            trigger(prefetch_request_type_to_event(in_msg.Type),
+                    in_msg.LineAddress,
+                    icache_entry, TBEs[in_msg.LineAddress]);
+          } else {
+            // No room in the L0-I, so we need to make room in the L0-I
+            Addr addr := Icache.cacheProbe(in_msg.LineAddress);
+            check_on_cache_probe(optionalQueue_in, addr);
+
+            trigger(Event:PF_L0_Replacement, addr,
+                    getICacheEntry(addr),
+                    TBEs[addr]);
+          }
+        } else {
+          // Data prefetch
+          Entry cache_entry := getDCacheEntry(in_msg.LineAddress);
+          if (is_valid(cache_entry)) {
+            // The block to be prefetched is already present in the
+            // cache. This request will be made benign and cause the
+            // prefetch queue to be popped.
+            trigger(prefetch_request_type_to_event(in_msg.Type),
+                    in_msg.LineAddress,
+                    cache_entry, TBEs[in_msg.LineAddress]);
+          }
+
+          // Check to see if it is in the L0-I
+          Entry icache_entry := getICacheEntry(in_msg.LineAddress);
+          if (is_valid(icache_entry)) {
+            // The block is in the wrong L0. Just drop the prefetch
+            // request.
+            trigger(prefetch_request_type_to_event(in_msg.Type),
+                    in_msg.LineAddress,
+                    icache_entry, TBEs[in_msg.LineAddress]);
+          }
+
+          if (Dcache.cacheAvail(in_msg.LineAddress)) {
+            // L0-D does't have the line, but we have space for it in
+            // the L0-D let's see if the L1 has it
+            trigger(prefetch_request_type_to_event(in_msg.Type),
+                    in_msg.LineAddress,
+                    cache_entry, TBEs[in_msg.LineAddress]);
+          } else {
+            // No room in the L0-D, so we need to make room in the L0-D
+            Addr addr := Dcache.cacheProbe(in_msg.LineAddress);
+            check_on_cache_probe(optionalQueue_in, addr);
+
+            trigger(Event:PF_L0_Replacement, addr,
+                    getDCacheEntry(addr),
+                    TBEs[addr]);
+          }
+        }
+      }
+    }
+  }
+
+  // Messages for this L0 cache from the L1 cache
+  in_port(messgeBuffer_in, CoherenceMsg, bufferFromL1, rank = 1) {
+    if (messgeBuffer_in.isReady(clockEdge())) {
+      peek(messgeBuffer_in, CoherenceMsg, block_on="addr") {
+        assert(in_msg.Dest == machineID);
+
+        Entry cache_entry := getCacheEntry(in_msg.addr);
+        TBE tbe := TBEs[in_msg.addr];
+
+        if(in_msg.Class == CoherenceClass:DATA_EXCLUSIVE) {
+            trigger(Event:Data_Exclusive, in_msg.addr, cache_entry, tbe);
+        } else if(in_msg.Class == CoherenceClass:DATA) {
+            trigger(Event:Data, in_msg.addr, cache_entry, tbe);
+        } else if(in_msg.Class == CoherenceClass:STALE_DATA) {
+            if (is_valid(tbe) && tbe.HtmReloadIfStale &&
+                !xact_mgr.isDoomed()) {
+                trigger(Event:Data_Stale_HtmReload, in_msg.addr, cache_entry, tbe);
+            } else {
+                trigger(Event:Data_Stale, in_msg.addr, cache_entry, tbe);
+            }
+        } else if (in_msg.Class == CoherenceClass:ACK) {
+            trigger(Event:Ack, in_msg.addr, cache_entry, tbe);
+        } else if (in_msg.Class == CoherenceClass:NACK) {
+          // If not in transaction do nack
+          // This should avoid lingering spec blocks to
+          // be inserted in cache and in case of validation
+          // it will just do the callback to clean the request
+            if (xact_mgr.config_allowEarlyValueFwd() && 
+                xact_mgr.isIllegalNack(in_msg.addr,
+                in_msg.Sender,
+                in_msg.transactionalPriority,
+                in_msg.swTransactionalPriority)) {
+                // Illegal nacks should only happen with fwd
+                assert(xact_mgr.config_allowEarlyValueFwd());
+                ActionOnIllegalWriteData actionOnIllegalData := xact_mgr.getActionOnIllegalData();
+                if (actionOnIllegalData ==
+                    ActionOnIllegalWriteData:Retry) {
+                    // Reusing reload if stale structure and mechanism
+                    // it is still legal as it is a retry on getx message
+                    // and should not get a data_stale in response
+                    if (is_valid(tbe) && tbe.HtmNumReloadsIllegal == 0 &&
+                        !tbe.HtmReloadIfIllegal) {
+                        tbe.HtmReloadIfIllegal := true;
+                    }
+                    if (is_valid(tbe) && tbe.HtmReloadIfIllegal &&
+                        !xact_mgr.isDoomed()) {
+                        trigger(Event:Nack_Spec_Illegal_Rtry, in_msg.addr, cache_entry, tbe);
+                    } else {
+                        trigger(Event:Nack, in_msg.addr, cache_entry, tbe);
+                    }
+                } else if (actionOnIllegalData ==
+                    ActionOnIllegalWriteData:Abort) {
+                    trigger(Event:Nack, in_msg.addr, cache_entry, tbe);  
+                }
+            } else if (in_msg.MessageSize == MessageSizeType:Response_Data &&
+                xact_mgr.inTransaction()) {
+                if (xact_mgr.shouldAcceptForwardedDataFromProducer(in_msg.addr,
+                    in_msg.Sender,
+                    in_msg.transactionalPriority,
+                    in_msg.swTransactionalPriority)) {
+                    assert(xact_mgr.config_allowEarlyValueFwd());
+                    trigger(Event:Nack_Spec, in_msg.addr, cache_entry, tbe);
+                } else {
+                    trigger(Event:Nack, in_msg.addr, cache_entry, tbe);
+                }
+            } else {
+                trigger(Event:Nack, in_msg.addr, cache_entry, tbe);
+            }
+        } else if (in_msg.Class == CoherenceClass:WB_ACK) {
+            trigger(Event:WB_Ack, in_msg.addr, cache_entry, tbe);
+        } else if (in_msg.Class == CoherenceClass:INV_OWN) {
+            if (is_valid(cache_entry) &&
+                cache_entry.getHtmLogPending()) {
+                // Nack L1 replacement of data log block while logging
+                // outstanding
+                assert(!xact_mgr.config_lazyVM()); // LogTM
+                assert(xact_mgr.checkWriteSignature(in_msg.addr));
+                trigger(Event:InvOwn_X,
+                        in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+            } else if (xact_mgr.checkWriteSignature(in_msg.addr)) {
+                xact_mgr.xactReplacement(in_msg.addr, in_msg.Sender);
+                if (!xact_mgr.config_allowWriteSetL1CacheEvictions()) {
+                    assert(xact_mgr.isDoomed());
+                    trigger(Event:Inv_Discard, in_msg.addr, cache_entry, tbe);
+                } else {
+                    trigger(Event:InvOwn_Wset, in_msg.addr, cache_entry, tbe);
+                }
+            } else if (xact_mgr.checkReadSignature(in_msg.addr)) {
+                if (xact_mgr.config_allowReadSetL1CacheEvictions()) {
+                    // NOTE: This option shall not to be mixed up with
+                    // config_allowReadSetL0CacheEvictions(),
+                    // which allows L0 to evict trans blocks.
+                    trigger(Event:InvOwn_Rset, in_msg.addr, cache_entry, tbe);
+                } else {
+                    xact_mgr.xactReplacement(in_msg.addr, in_msg.Sender);
+                    assert(xact_mgr.isDoomed());
+                    trigger(Event:InvOwn, in_msg.addr, cache_entry, tbe);
+                }
+            } else {
+                trigger(Event:InvOwn, in_msg.addr, cache_entry, tbe);
+            }
+        } else if (in_msg.Class == CoherenceClass:INV_ELSE) {
+            if (shouldNackStore(in_msg.addr,
+                                in_msg.OriginalRequestor,
+                                in_msg.Timestamp,
+                                in_msg.Transactional,
+                                in_msg.transactionalPriority,
+                                in_msg.swTransactionalPriority,
+                                false)) {
+                trigger(Event:InvElse_X,
+                        in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+            }
+            else if (machineIDToMachineType(in_msg.OriginalRequestor) == MachineType:L2Cache) {
+                if (xact_mgr.checkWriteSignature(in_msg.addr)) {
+                    if (xact_mgr.config_allowWriteSetL2CacheEvictions()) {
+                            assert(!xact_mgr.config_lazyVM()); // LogTM
+                            trigger(Event:InvElse, in_msg.addr,
+                                    getCacheEntry(in_msg.addr), tbe);
+                    } else {
+                        // L2 replacements of L1 blocks in Wset should discard
+                        // writeback
+                        xact_mgr.xactReplacement(in_msg.addr, in_msg.OriginalRequestor);
+                        assert(xact_mgr.isDoomed());
+                        trigger(Event:Inv_Discard, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+                    }
+                } else {
+                    // LLC Replacement
+                    trigger(Event:InvElse, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+                }
+            }
+            else if (xact_mgr.checkReadSignature(in_msg.addr) &&
+                     !xact_mgr.isDoomed()) {
+                // Sanity check: Conflict on a Rset block, if this
+                // remote req is not nacked, xact_mgr must have set
+                // the abort flag..
+                assert(false);
+            }
+            else if (!shouldSendDataToRequestor(in_msg.addr)) {
+                if (xact_mgr.config_allowWriteSetL1CacheEvictions()) {
+                    assert(!xact_mgr.config_lazyVM()); // LogTM
+                    assert(false); // Req-wins??
+                } else {
+                    // L2 replacements of L1 blocks in Wset should discard
+                    // writeback
+                    xact_mgr.xactReplacement(in_msg.addr, in_msg.OriginalRequestor);
+                    trigger(Event:Inv_Discard, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+                }
+            }
+            else {
+                trigger(Event:InvElse, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+            }
+        } else if (in_msg.Class == CoherenceClass:GETX ||
+                   in_msg.Class == CoherenceClass:UPGRADE) {
+          // upgrade transforms to GETX due to race
+         if (shouldNackStore(in_msg.addr, in_msg.OriginalRequestor,
+                              in_msg.Timestamp,
+                              in_msg.Transactional,
+                              in_msg.transactionalPriority,
+                              in_msg.swTransactionalPriority,
+                              true/*local_is_exclusive*/)
+                              ) {
+                // Conflict resolved by nacking request
+             trigger(Event:Fwd_GETX_X,
+                      in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+	  }
+          else if (!shouldSendDataToRequestor(in_msg.addr)) {
+              if (!xact_mgr.config_lazyVM()) { // LogTM
+                  assert(false); // Req-wins??
+              } else {
+                  // Don't nack requestor, yield so that L2 provides clean data
+                  assert(xact_mgr.config_lazyVM());
+                  if (isTransactionalMsg(in_msg.Transactional)) {
+                      xact_mgr.xactReplacement(in_msg.addr, in_msg.OriginalRequestor);
+                      trigger(Event:Fwd_TGETX_Discard, in_msg.addr,
+                              getCacheEntry(in_msg.addr), tbe);
+                  }
+                  else {
+                      xact_mgr.xactReplacement(in_msg.addr, in_msg.OriginalRequestor);
+                      trigger(Event:Fwd_GETX_Discard, in_msg.addr,
+                              getCacheEntry(in_msg.addr), tbe);
+                  }
+              }
+	  }
+          else if (isTransactionalMsg(in_msg.Transactional) && xact_mgr.config_lazyVM()) {
+	    // Requestor is transactional: if local data is dirty,
+	    // write it back to L2 (requestor may discard it on abort)
+	    trigger(Event:Fwd_TGETX, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+	  }
+	  else { // Requestor is non-transactional: send data, no writeback needed
+	    trigger(Event:Fwd_GETX, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+          }
+        } else if (in_msg.Class == CoherenceClass:GETS ||
+		   in_msg.Class == CoherenceClass:GET_INSTR) {
+            if (shouldNackLoad(in_msg.addr, in_msg.OriginalRequestor,
+                               in_msg.Timestamp,
+                               in_msg.Transactional,
+                               in_msg.transactionalPriority,
+                               in_msg.swTransactionalPriority)) {
+                // Conflict resolved by snacking request
+                trigger(Event:Fwd_GETS_X,
+                        in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+            }
+            else if (!shouldSendDataToRequestor(in_msg.addr)) {
+                // Don't nack requestor, yield so that L1 provides clean data
+                assert(xact_mgr.config_lazyVM());
+                xact_mgr.xactReplacement(in_msg.addr, in_msg.OriginalRequestor);
+                trigger(Event:Fwd_GETS_Discard, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+            }
+            else {
+                trigger(Event:Fwd_GETS, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+            }
+	  /* When using the O3CPU model, branch mispredictions may
+	   * lead the fetch stage (perhaps mistakenly) to miss on
+	   * cache blocks that belong to the RWsets of a currently
+	   * running transaction of another core. Thus, the following
+	   * asserts may fail despite correct execution. The wrongly
+	   * predicted fetch PC will be eventually corrected and the
+	   * fetched instructions squashed...
+	   *
+        } else if (in_msg.Class == CoherenceClass:GET_INSTR) {
+	  assert(xact_mgr.checkReadSignature(in_msg.addr) == false &&
+		 xact_mgr.checkWriteSignature(in_msg.addr) == false);
+          trigger(Event:Fwd_GET_INSTR, in_msg.addr, getCacheEntry(in_msg.addr), tbe);
+	  */
+        } else {
+          error("Invalid forwarded request type");
+        }
+      }
+    }
+  }
+
+  // Mandatory Queue betweens Node's CPU and it's L0 caches
+  in_port(mandatoryQueue_in, RubyRequest, mandatoryQueue, desc="...", rank = 0) {
+    if (mandatoryQueue_in.isReady(clockEdge())) {
+      peek(mandatoryQueue_in, RubyRequest, block_on="LineAddress") {
+
+        if (in_msg.Type == RubyRequestType:IFETCH) {
+          // Check for data access to blocks in I-cache and ifetchs to blocks in D-cache
+          // ** INSTRUCTION ACCESS ***
+
+          Entry Icache_entry := getICacheEntry(in_msg.LineAddress);
+          if (is_valid(Icache_entry)) {
+            // The tag matches for the L0, so the L0 asks the L2 for it.
+            trigger(mandatory_request_type_to_event(in_msg.Type,
+                                                    in_msg.LineAddress,
+                                                    in_msg.htmFromTransaction),
+                    in_msg.LineAddress,
+                    Icache_entry, TBEs[in_msg.LineAddress]);
+          } else {
+
+            // Check to see if it is in the OTHER L0
+            Entry Dcache_entry := getDCacheEntry(in_msg.LineAddress);
+            if (is_valid(Dcache_entry)) {
+                if (xact_mgr.checkWriteSignature(in_msg.LineAddress) ||
+                    xact_mgr.checkReadSignature(in_msg.LineAddress)) {
+                    // The block is in the wrong L1 and we cannot evict
+                    // it witout aborting: Avoid replacement, serve it
+                    // from L1D (unrealistic but uncommon case)
+                    trigger(mandatory_request_type_to_event(in_msg.Type,
+                                                            in_msg.LineAddress,
+                                                            in_msg.htmFromTransaction),
+                            in_msg.LineAddress,
+                            Dcache_entry, TBEs[in_msg.LineAddress]);
+                } else {
+                    // The block is in the wrong L0, put the request on the queue to the shared L2
+                    trigger(Event:L0_Replacement, in_msg.LineAddress,
+                            Dcache_entry, TBEs[in_msg.LineAddress]);
+                }
+            }
+
+            if (Icache.cacheAvail(in_msg.LineAddress)) {
+              // L0 does't have the line, but we have space for it
+              // in the L0 so let's see if the L2 has it
+              trigger(mandatory_request_type_to_event(in_msg.Type,
+                                                      in_msg.LineAddress,
+                                                      in_msg.htmFromTransaction),
+                      in_msg.LineAddress,
+                      Icache_entry, TBEs[in_msg.LineAddress]);
+            } else {
+              // No room in the L0, so we need to make room in the L0
+              // Check if the line we want to evict is not locked
+              Addr victimAddr := Icache.cacheProbe(in_msg.LineAddress);
+              check_on_cache_probe(mandatoryQueue_in, victimAddr);
+              if (xact_mgr.checkWriteSignature(victimAddr)) {
+                  // Eviction of speculatively modified data
+                  xact_mgr.xactReplacement(victimAddr, machineID, true);
+                  if (!xact_mgr.config_allowWriteSetL1CacheEvictions()) {
+                      assert(xact_mgr.isDoomed());
+                      // Wset eviction: discard data, xact mgr will abort
+                      trigger(Event:L0_Replacement_Wset_Discard, victimAddr,
+                              getICacheEntry(victimAddr),
+                              TBEs[victimAddr]);
+                  } else { // LogTM allows replacing write set blocks
+                      assert(!xact_mgr.config_lazyVM());
+                      // Wset eviction: discard data, xact mgr will abort
+                      trigger(Event:L0_Replacement_Wset, victimAddr,
+                              getICacheEntry(victimAddr),
+                              TBEs[victimAddr]);
+                  }
+              }
+              else if (xact_mgr.checkReadSignature(victimAddr)) {
+                  if (xact_mgr.config_allowReadSetL0CacheEvictions()) {
+                      // Eviction of speculatively read data: allowed, stay as sharer
+                      trigger(Event:L0_Replacement_Rset, victimAddr,
+                              getICacheEntry(victimAddr),
+                              TBEs[victimAddr]);
+                  }
+                  else {
+                      // Eviction of speculatively read data: abort
+                      xact_mgr.xactReplacement(victimAddr, machineID, true);
+                      assert(xact_mgr.isDoomed());
+                      trigger(Event:L0_Replacement, victimAddr,
+                              getICacheEntry(victimAddr),
+                              TBEs[victimAddr]);
+                  }
+	      }
+	      else { // Evicting non-txnal data
+                  trigger(Event:L0_Replacement, victimAddr,
+                          getICacheEntry(victimAddr),
+                          TBEs[victimAddr]);
+              }
+            }
+          }
+        } else {
+          // *** DATA ACCESS ***
+          Entry Dcache_entry := getDCacheEntry(in_msg.LineAddress);
+
+          // early out for failed store conditionals
+          if (in_msg.Type == RubyRequestType:Store_Conditional) {
+              if (!sequencer.llscCheckMonitor(in_msg.LineAddress)) {
+                trigger(Event:Failed_SC, in_msg.LineAddress,
+                        Dcache_entry, TBEs[in_msg.LineAddress]);
+            }
+          }
+          if (is_valid(Dcache_entry)) {
+            // The tag matches for the L0, so the L0 ask the L1 for it
+            trigger(mandatory_request_type_to_event(in_msg.Type,
+                                                    in_msg.LineAddress,
+                                                    in_msg.htmFromTransaction),
+                    in_msg.LineAddress,
+                    Dcache_entry, TBEs[in_msg.LineAddress]);
+          } else {
+            // if the request is not valid, the store conditional will fail
+            if (in_msg.Type == RubyRequestType:Store_Conditional) {
+                // if the line is not valid, it can't be locked
+                trigger(Event:Failed_SC, in_msg.LineAddress,
+                        Dcache_entry, TBEs[in_msg.LineAddress]);
+            } else {
+              // Check to see if it is in the OTHER L0
+              Entry Icache_entry := getICacheEntry(in_msg.LineAddress);
+              if (is_valid(Icache_entry)) {
+                  // The block is in the wrong L0, put the request on the queue to the private L1
+
+                  // Thus it cannot be part of write set
+                  assert(!xact_mgr.checkWriteSignature(in_msg.LineAddress));
+                  // May be part of read set if L0 read-set evictions allowed
+                  if (xact_mgr.checkReadSignature(in_msg.LineAddress)) {
+                      // If in Rset and in instruction cache, either
+                      // using imprecise rsets (and this is the first
+                      // load) or evictions must be allowed
+                      assert(!xact_mgr.config_preciseReadSetTracking() ||
+                             xact_mgr.config_allowReadSetL0CacheEvictions());
+
+                      xact_mgr.xactReplacement(in_msg.LineAddress, machineID);
+                      if (!xact_mgr.config_allowReadSetL0CacheEvictions()) {
+                          assert(xact_mgr.isDoomed());
+                          trigger(Event:L0_Replacement, in_msg.LineAddress,
+                                  Icache_entry, TBEs[in_msg.LineAddress]);
+                      } else {
+                          trigger(Event:L0_Replacement_Rset, in_msg.LineAddress,
+                                  Icache_entry, TBEs[in_msg.LineAddress]);
+                      }
+                  } else {
+                      trigger(Event:L0_Replacement, in_msg.LineAddress,
+                              Icache_entry, TBEs[in_msg.LineAddress]);
+                  }
+              }
+
+              if (Dcache.cacheAvail(in_msg.LineAddress)) {
+                // L1 does't have the line, but we have space for it
+                // in the L0 let's see if the L1 has it
+                trigger(mandatory_request_type_to_event(in_msg.Type,
+                                                        in_msg.LineAddress,
+                                                        in_msg.htmFromTransaction),
+                        in_msg.LineAddress,
+                        Dcache_entry, TBEs[in_msg.LineAddress]);
+              } else {
+                // No room in the L1, so we need to make room in the L0
+                // Check if the line we want to evict is not locked
+                Addr victimAddr := Dcache.cacheProbe(in_msg.LineAddress);
+                check_on_cache_probe(mandatoryQueue_in, victimAddr);
+                if (xact_mgr.checkWriteSignature(victimAddr)) {
+                    // Eviction of speculatively modified data
+                    xact_mgr.xactReplacement(victimAddr, machineID, true);
+                    if (xact_mgr.config_lazyVM()) {
+                        assert(xact_mgr.isDoomed());
+                        // Wset eviction: discard data, xact mgr will abort
+                        trigger(Event:L0_Replacement_Wset_Discard, victimAddr,
+                                getDCacheEntry(victimAddr),
+                                TBEs[victimAddr]);
+                    } else { // LogTM allows replacing write set blocks
+                        // Wset eviction: discard data, xact mgr will abort
+                        trigger(Event:L0_Replacement_Wset, victimAddr,
+                                getDCacheEntry(victimAddr),
+                                TBEs[victimAddr]);
+                    }
+                }
+                else if (xact_mgr.checkReadSignature(victimAddr)) {
+                    if (xact_mgr.config_allowReadSetL0CacheEvictions()) {
+                        // Eviction of speculatively read data: allowed, stay as sharer
+                        trigger(Event:L0_Replacement_Rset, victimAddr,
+                                getDCacheEntry(victimAddr),
+                                TBEs[victimAddr]);
+                    }
+                    else {
+                        // Eviction of speculatively read data: abort
+                        xact_mgr.xactReplacement(victimAddr, machineID, true);
+                        assert(xact_mgr.isDoomed());
+                        trigger(Event:L0_Replacement, victimAddr,
+                                getDCacheEntry(victimAddr),
+                                TBEs[victimAddr]);
+                    }
+                }
+                else { // Evicting non-txnal data
+                    trigger(Event:L0_Replacement, victimAddr,
+                            getDCacheEntry(victimAddr),
+                            TBEs[victimAddr]);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ACTIONS
+  action(a_issueGETS, "a", desc="Issue GETS") {
+    peek(mandatoryQueue_in, RubyRequest) {
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:GETS;
+        out_msg.Sender := machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
+                address, out_msg.Dest);
+        out_msg.MessageSize := MessageSizeType:Control;
+        out_msg.AccessMode := in_msg.AccessMode;
+	if (in_msg.htmFromTransaction) {
+          assert(is_valid(tbe));
+          tbe.HtmFromTransaction := true;
+          out_msg.Transactional := in_msg.Transactional;
+          out_msg.transactionalPriority := in_msg.transactionalPriority;
+          out_msg.swTransactionalPriority := in_msg.swTransactionalPriority;
+          out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+          APPEND_TRANSITION_COMMENT(" trans");
+          //DPRINTF(RubyHTM, "Transactional load miss %#x\n", address);
+          if (xact_mgr.shouldReloadIfStale()) {
+             tbe.HtmReloadIfStale := true;
+          }
+	} else {
+           out_msg.Timestamp := curCycle();
+        }
+        APPEND_TRANSITION_COMMENT(" TS: ");
+        APPEND_TRANSITION_COMMENT(out_msg.Timestamp);
+      }
+    }
+  }
+  // ACTIONS
+  action(irs_incTBEHtmNumReloads , "irs", desc="") {
+      if (tbe.HtmNumReloads < xact_mgr.config_reloadIfStaleMaxRetries()) {
+         tbe.HtmNumReloads := tbe.HtmNumReloads + 1;
+      } else { // Disable reload: next Data_Stale will abort this tx
+         tbe.HtmReloadIfStale := false;
+      }
+  }
+  // ACTIONS
+  action(irsi_incTBEHtmNumReloadsIllegal , "irsi", desc="") {
+      // Reusing this config option, hope it is good
+      if (tbe.HtmNumReloadsIllegal < xact_mgr.config_reloadIfStaleMaxRetries()) {
+         tbe.HtmNumReloadsIllegal := tbe.HtmNumReloadsIllegal + 1;
+      } else { // Disable reload: next illegal data will abort this tx
+         tbe.HtmReloadIfIllegal := false;
+      }
+  }
+  // ACTIONS
+  action(ar_reissueGETS, "ar", desc="Issue GETS") {
+      assert(is_valid(tbe));
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:GETS;
+        out_msg.Sender := machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
+                address, out_msg.Dest);
+        out_msg.MessageSize := MessageSizeType:Control;
+        out_msg.AccessMode := RubyAccessMode:User;
+        out_msg.Transactional := getTransactionBit();
+        out_msg.transactionalPriority := getTransactionPriority();
+        out_msg.swTransactionalPriority := xact_mgr.getSwTransactionPriority();
+        out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+        APPEND_TRANSITION_COMMENT(" trans");
+        APPEND_TRANSITION_COMMENT(" TS: ");
+        APPEND_TRANSITION_COMMENT(out_msg.Timestamp);
+      }
+  }
+
+  action(arx_reissueGETX, "arx", desc="Issue GETX") {
+      assert(is_valid(tbe));
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        assert(xact_mgr.shouldReloadIfStale());
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:GETX;
+        out_msg.Sender := machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        DPRINTF(RubySlicc, "address: %#x, destination: %s - Nack_Spec_Illegal_Rtry\n",
+                address, out_msg.Dest);
+        out_msg.MessageSize := MessageSizeType:Control;
+        out_msg.AccessMode := RubyAccessMode:User;
+        out_msg.Transactional := getTransactionBit();
+        out_msg.transactionalPriority := getTransactionPriority();
+        out_msg.swTransactionalPriority := xact_mgr.getSwTransactionPriority();
+        out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+        APPEND_TRANSITION_COMMENT(" trans");
+        APPEND_TRANSITION_COMMENT(" TS: ");
+        APPEND_TRANSITION_COMMENT(out_msg.Timestamp);
+      }
+  }
+  
+
+  action(b_issueGETX, "b", desc="Issue GETX") {
+    peek(mandatoryQueue_in, RubyRequest) {
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:GETX;
+        out_msg.Sender := machineID;
+        DPRINTF(RubySlicc, "%s\n", machineID);
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+
+        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
+                address, out_msg.Dest);
+        out_msg.MessageSize := MessageSizeType:Control;
+        out_msg.AccessMode := in_msg.AccessMode;
+	if (in_msg.htmFromTransaction) {
+          out_msg.Transactional := in_msg.Transactional;
+          out_msg.transactionalPriority := in_msg.transactionalPriority;
+          out_msg.swTransactionalPriority := in_msg.swTransactionalPriority;
+          out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+          APPEND_TRANSITION_COMMENT(" trans");
+	} else {
+           out_msg.Timestamp := curCycle();
+        }
+        APPEND_TRANSITION_COMMENT(" TS: ");
+        APPEND_TRANSITION_COMMENT(out_msg.Timestamp);
+      }
+    }
+  }
+
+  action(c_issueUPGRADE, "c", desc="Issue GETX") {
+    peek(mandatoryQueue_in, RubyRequest) {
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:UPGRADE;
+        out_msg.Sender := machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+
+        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
+                address, out_msg.Dest);
+        out_msg.MessageSize := MessageSizeType:Control;
+        out_msg.AccessMode := in_msg.AccessMode;
+	if (in_msg.htmFromTransaction) {
+          out_msg.Transactional := in_msg.Transactional;
+          out_msg.transactionalPriority := in_msg.transactionalPriority;
+          out_msg.swTransactionalPriority := in_msg.swTransactionalPriority;
+          out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+          APPEND_TRANSITION_COMMENT(" trans");
+	} else {
+           out_msg.Timestamp := curCycle();
+        }
+        APPEND_TRANSITION_COMMENT(" TS: ");
+        APPEND_TRANSITION_COMMENT(out_msg.Timestamp);
+      }
+    }
+  }
+
+  action(f_sendDataToL1, "f", desc="Send data to the L1 cache") {
+    // hardware transactional memory
+      assert((xact_mgr.checkWriteSignature(address) == false) ||
+             !xact_mgr.config_lazyVM()); // LogTM
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getDataLatency()) {
+        assert(is_valid(cache_entry));
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:INV_DATA;
+        out_msg.DataBlk := cache_entry.DataBlk;
+        out_msg.Dirty := cache_entry.Dirty;
+        out_msg.Sender := machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        out_msg.MessageSize := MessageSizeType:Writeback_Data;
+      }
+      cache_entry.Dirty := false;
+  }
+
+  action(fi_sendInvAck, "fi", desc="Send data to the L1 cache") {
+    peek(messgeBuffer_in, CoherenceMsg) {
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:INV_ACK;
+        out_msg.Sender := machineID;
+        out_msg.OriginalRequestor := in_msg.OriginalRequestor;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        out_msg.MessageSize := MessageSizeType:Response_Control;
+      }
+    }
+  }
+  action(fn_sendInvNack, "fn", desc="Send nak to the L1 cache") {
+    peek(messgeBuffer_in, CoherenceMsg) {
+      DPRINTF(RubySlicc, "Sending nak for %#x to the L1\n", address);
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:NACK;
+        out_msg.Sender := machineID;
+        out_msg.OriginalRequestor := in_msg.OriginalRequestor;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        out_msg.MessageSize := MessageSizeType:Response_Control;
+        out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+        out_msg.Transactional := getTransactionBit();
+        out_msg.transactionalPriority := getTransactionPriority();
+        out_msg.swTransactionalPriority := xact_mgr.getSwTransactionPriority();
+        // Conflict resolved by nacking request
+        // This is wrong, is_valid only checks if the entry
+        // is not null but for example in IM or IS state
+        // is_valid returns true... cover this up here
+        // to avoid extra states
+        if (is_valid(cache_entry) &&
+            getState(tbe, cache_entry, address) != State:IM &&
+            getState(tbe, cache_entry, address) != State:IS) {
+          if (xact_mgr.shouldForwardDataToConsumer(in_msg.addr, in_msg.OriginalRequestor,
+                                                   in_msg.Transactional,
+                                                   in_msg.transactionalPriority,
+                                                   in_msg.swTransactionalPriority,
+                                                   getState(tbe, cache_entry, in_msg.addr) == State:SM)) {
+              xact_mgr.addConsumer(in_msg.addr, in_msg.OriginalRequestor, in_msg.transactionalPriority, in_msg.swTransactionalPriority);
+            // Trick to make updated tx prio to appear in the message
+            out_msg.transactionalPriority := getTransactionPriority();
+            out_msg.MessageSize := MessageSizeType:Writeback_Data;
+            out_msg.DataBlk := getDCacheEntry(address).DataBlk;
+            APPEND_TRANSITION_COMMENT(" Sending Nack+DataSpec - Trans: ");
+          } else {
+            APPEND_TRANSITION_COMMENT(" Sending Nack - Trans: ");
+            xact_mgr.addBlockToNackReg(in_msg.addr, in_msg.OriginalRequestor);
+          }
+        } else {
+          APPEND_TRANSITION_COMMENT(" Found cache block was invalid!");
+          APPEND_TRANSITION_COMMENT(" Sending Nack - Trans: ");
+        }
+          
+          
+          APPEND_TRANSITION_COMMENT(out_msg.Transactional);
+      }
+    }
+  }
+
+  action(vcd_validateConsumedData, "vcd", desc="Validate received data against forwarded value") {
+      peek(messgeBuffer_in, CoherenceMsg) {
+          if (is_valid(cache_entry)) {
+              if (xact_mgr.validateDataBlock(address, in_msg.Sender, cache_entry.DataBlk, in_msg.DataBlk,
+                                             in_msg.Timestamp,
+                                             cache_entry.Dirty,
+                                             in_msg.Class == CoherenceClass:NACK)) {
+                  APPEND_TRANSITION_COMMENT(" Validation succeeded!");
+              } else {
+                  // If validation failed while getting data+coherence
+                  // permissions (DATA/DATA_EXCLUSIVE), we must be
+                  // careful not to leave in cache the wrong data
+                  // (consumed data, to be discarded). Since this
+                  // transaction will abort, we opt for writing
+                  // incoming data version in both cases (not really
+                  // necessary for DATA_EXCLUSIVE since cached block
+                  // is part of wset and will be invalidated)
+                  APPEND_TRANSITION_COMMENT(" Validation failed!");
+                  if(in_msg.Class == CoherenceClass:DATA_EXCLUSIVE) {
+                      assert(cache_entry.Dirty);
+                      // Write incoming value to cache,
+                      cache_entry.DataBlk := in_msg.DataBlk;
+                  } else if(in_msg.Class == CoherenceClass:DATA) {
+                      // CAREFUL HERE: If validation fails
+                      // (e.g. producer aborted, validation gets the
+                      // "older" version), we must overwrite cached
+                      // data with incoming data (latest non-spec
+                      // value), as it will be kept in S
+                      cache_entry.DataBlk := in_msg.DataBlk;
+                      // Cache block is clean: compare both blocks
+                      assert(!cache_entry.Dirty);
+                  }
+              }
+          } else {
+                  APPEND_TRANSITION_COMMENT(" Validation skipped, cache entry not found!");
+          }
+      }
+  }
+
+  action(forward_eviction_to_cpu, "\cc", desc="Send eviction information to the processor") {
+    // send_evictions required by HTM support to correctly handle
+    // conflicts with spec./outstanding loads (O3CPU and timing)
+    assert(send_evictions);
+    // NOTE: HTM needs to distinguish between evictions, otherwise
+    // spurious pipeline squashes in O3CPU occur due to tolerated
+    // evictions of Rset blocks (when modelling read-set signatures),
+    // which are considered as conflicts caused by remote invalidations.
+    if (send_evictions) {
+        DPRINTF(RubySlicc, "Sending invalidation for %#x to the CPU\n", address);
+        sequencer.evictionCallback(address);
+    }
+  }
+
+  action(g_issuePUTE, "\ge", desc="Relinquish line to the L1 cache") {
+    enqueue(requestNetwork_out, CoherenceMsg, Dcache.getDataLatency()) {
+      assert(is_valid(cache_entry));
+      out_msg.addr := address;
+      out_msg.Class := CoherenceClass:PUTX;
+      out_msg.Dirty := cache_entry.Dirty;
+      out_msg.Sender:= machineID;
+      out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+      out_msg.MessageSize := MessageSizeType:Writeback_Control;
+    }
+  }
+
+  action(g_issuePUTX, "\gx", desc="Send modified line to the L1 cache") {
+      assert((xact_mgr.checkWriteSignature(address) == false) ||
+             !xact_mgr.config_lazyVM()); // LogTM
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getDataLatency()) {
+        assert(is_valid(cache_entry));
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:PUTX;
+        out_msg.Dirty := cache_entry.Dirty;
+        out_msg.Sender:= machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        out_msg.MessageSize := MessageSizeType:Writeback_Data;
+        out_msg.DataBlk := cache_entry.DataBlk;
+      }
+  }
+
+  action(gxc_issuePUTXCOPY, "\gxc", desc="Send modified line to the L1 cache, keep exclusive copy") {
+      assert((xact_mgr.checkWriteSignature(address) == false) ||
+             !xact_mgr.config_lazyVM()); // LogTM
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getDataLatency()) {
+        assert(is_valid(cache_entry));
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:PUTX_COPY;
+        out_msg.Dirty := cache_entry.Dirty;
+        out_msg.Sender:= machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        out_msg.MessageSize := MessageSizeType:Writeback_Data;
+        out_msg.DataBlk := cache_entry.DataBlk;
+      }
+      cache_entry.Dirty := false;
+  }
+
+  action(h_load_hit, "hd", desc="Notify sequencer the load completed (cache hit)") {
+    assert(is_valid(cache_entry));
+    DPRINTF(RubySlicc, "%#x %s\n", address, cache_entry.DataBlk);
+    Dcache.setMRU(cache_entry);
+    sequencer.readCallback(address, cache_entry.DataBlk);
+  }
+
+  action(h_ifetch_hit, "hi", desc="Notify sequencer the ifetch completed (cache hit)") {
+    assert(is_valid(cache_entry));
+    Entry Icache_entry := getICacheEntry(address);
+    if (!is_valid(Icache_entry)) {
+        APPEND_TRANSITION_COMMENT(" WARNING: Data from L0 data cache");
+        DPRINTF(RubyHTM, "Ifetch obtained data from L0 data cache for addr %#x\n", address);
+    }
+    DPRINTF(RubySlicc, "%s\n", cache_entry.DataBlk);
+    Icache.setMRU(cache_entry);
+    sequencer.readCallback(address, cache_entry.DataBlk);
+  }
+
+  // The action name uses a counterintuitive _hit prefix when it is only
+  // called due to a cache miss. It is technically now a hit after having
+  // serviced the miss.
+  action(hx_load_hit, "hxd", desc="Notify sequencer the load completed (cache miss)") {
+      assert(is_valid(cache_entry));
+      DPRINTF(RubySlicc, "%#x %s\n", address, cache_entry.DataBlk);
+      Dcache.setMRU(cache_entry);
+      sequencer.readCallback(address, cache_entry.DataBlk, true);
+      //APPEND_TRANSITION_COMMENT(cache_entry.DataBlk);
+      
+  }
+
+  // The action name uses a counterintuitive _hit prefix when it is only
+  // called due to a cache miss. It is technically now a hit after having
+  // serviced the miss.
+  action(hx_ifetch_hit, "hxi", desc="Notify sequencer the ifetch completed (cache miss)") {
+    assert(is_valid(cache_entry));
+    DPRINTF(RubySlicc, "%s\n", cache_entry.DataBlk);
+    Icache.setMRU(cache_entry);
+    sequencer.readCallback(address, cache_entry.DataBlk, true);
+  }
+
+  action(hh_store_hit, "\h", desc="Notify sequencer that store completed (cache hit)") {
+    assert(is_valid(cache_entry));
+    DPRINTF(RubySlicc, "%#x %s\n", address, cache_entry.DataBlk);
+    Dcache.setMRU(cache_entry);
+    sequencer.writeCallback(address, cache_entry.DataBlk);
+    cache_entry.Dirty := true;
+  }
+
+  // The action name uses a counterintuitive _hit prefix when it is only
+  // called due to a cache miss. It is technically now a hit after having
+  // serviced the miss.
+  action(hhx_store_hit, "\hx", desc="Notify sequencer that store completed (cache miss)") {
+      assert(is_valid(cache_entry));
+      DPRINTF(RubySlicc, "%#x %s\n", address, cache_entry.DataBlk);
+      Dcache.setMRU(cache_entry);
+      sequencer.writeCallback(address, cache_entry.DataBlk, true);
+      cache_entry.Dirty := true;
+  }
+
+  // The action name uses a counterintuitive _hit prefix when it is only
+  // called due to a cache miss. It is technically now a hit after having
+  // serviced the miss.
+  action(hhxs_store_hit_consumedBlock, "\hxs", desc="Notify sequencer that store completed (cache miss)") {
+      assert(xact_mgr.config_allowEarlyValueFwd());
+      if (is_valid(cache_entry)) {
+          Dcache.setMRU(cache_entry);
+          sequencer.writeCallback(address, cache_entry.DataBlk, true);
+          cache_entry.Dirty := true;
+      } else {
+          // Need to callback to remove validation req from
+          // Sequencer, ok to pass dummy datablock to callback
+          if (getState(tbe, cache_entry, address) == State:FD_V ||
+              getState(tbe, cache_entry, address) == State:I) {
+              // If the block is already deallocated, we can get here
+              // in invalid state and it is correct as in hx_load_hit
+              sequencer.writeCallback(address, tbe.DataBlk, true);
+          }
+      }
+  }
+
+  action(i_allocateTBE, "i", desc="Allocate TBE (number of invalidates=0)") {
+    check_allocate(TBEs);
+    assert(is_valid(cache_entry));
+    TBEs.allocate(address);
+    set_tbe(TBEs[address]);
+    tbe.Dirty := cache_entry.Dirty;
+    tbe.DataBlk := cache_entry.DataBlk;
+  }
+
+  action(k_popMandatoryQueue, "k", desc="Pop mandatory queue") {
+    mandatoryQueue_in.dequeue(clockEdge());
+  }
+
+  action(l_popRequestQueue, "l",
+         desc="Pop incoming request queue and profile the delay within this virtual network") {
+    Tick delay := messgeBuffer_in.dequeue(clockEdge());
+    profileMsgDelay(2, ticksToCycles(delay));
+  }
+
+  action(o_popIncomingResponseQueue, "o",
+         desc="Pop Incoming Response queue and profile the delay within this virtual network") {
+    Tick delay := messgeBuffer_in.dequeue(clockEdge());
+    profileMsgDelay(1, ticksToCycles(delay));
+  }
+
+  action(s_deallocateTBE, "s", desc="Deallocate TBE") {
+    TBEs.deallocate(address);
+    unset_tbe();
+  }
+
+  action(u_writeDataToCache, "u", desc="Write data to cache") {
+    peek(messgeBuffer_in, CoherenceMsg) {
+      assert(is_valid(cache_entry));
+      cache_entry.DataBlk := in_msg.DataBlk;
+      //APPEND_TRANSITION_COMMENT(in_msg.DataBlk);
+    }
+  }
+
+  action(nfd_notifyForwardedData, "nfd", desc="Write data to cache") {
+     peek(messgeBuffer_in, CoherenceMsg) {
+        if (is_valid(cache_entry)) {
+            APPEND_TRANSITION_COMMENT(in_msg.DataBlk);
+            assert(in_msg.Class == CoherenceClass:NACK);
+            assert(in_msg.MessageSize == MessageSizeType:Response_Data);
+            xact_mgr.notifyForwardedDataFromProducer(address, in_msg.DataBlk,
+                                                     in_msg.Sender,
+                                                     in_msg.Timestamp, // Always come with ts
+                                                     in_msg.transactionalPriority,
+                                                     in_msg.swTransactionalPriority);
+        }
+     }
+  }
+
+  action(u_writeInstToCache, "ui", desc="Write data to cache") {
+    peek(messgeBuffer_in, CoherenceMsg) {
+      assert(is_valid(cache_entry));
+      cache_entry.DataBlk := in_msg.DataBlk;
+    }
+  }
+
+  action(ff_deallocateCacheBlock, "\f",
+         desc="Deallocate L1 cache block.") {
+    if (Dcache.isTagPresent(address)) {
+      Dcache.deallocate(address);
+    } else {
+      Icache.deallocate(address);
+    }
+    unset_cache_entry();
+  }
+
+  action(oo_allocateDCacheBlock, "\o", desc="Set L1 D-cache tag equal to tag of block B") {
+    if (is_invalid(cache_entry)) {
+      set_cache_entry(Dcache.allocate(address, new Entry));
+    }
+    // If setMRU only called upon callback, in the case of subsequent
+    // accesses to different blocks that map to the same set, the
+    // victim is often a way with a previous outstanding miss whose
+    // MRU has not yet been updated, which should be considered the
+    // MRU but instead is chosen as victim for replacement
+    Dcache.setMRU(cache_entry);
+  }
+
+  action(pp_allocateICacheBlock, "\p", desc="Set L1 I-cache tag equal to tag of block B") {
+    if (is_invalid(cache_entry)) {
+      set_cache_entry(Icache.allocate(address, new Entry));
+    }
+  }
+
+  action(z_stallAndWaitMandatoryQueue, "\z", desc="Stall cpu request queue") {
+    stall_and_wait(mandatoryQueue_in, address);
+  }
+
+  action(kd_wakeUpDependents, "kd", desc="Wake-up dependents") {
+    wakeUpAllBuffers(address);
+  }
+
+  action(uu_profileInstMiss, "\ui", desc="Profile the demand miss") {
+    Icache.profileDemandMiss();
+  }
+
+  action(uu_profileInstHit, "\uih", desc="Profile the demand hit") {
+    Icache.profileDemandHit();
+  }
+
+  action(uu_profileDataMiss, "\ud", desc="Profile the demand miss") {
+    Dcache.profileDemandMiss();
+  }
+
+  action(uu_profileDataHit, "\udh", desc="Profile the demand hit") {
+    Dcache.profileDemandHit();
+  }
+
+  // store conditionals
+
+  action(hhc_storec_fail, "\hc",
+         desc="Notify sequencer that store conditional failed") {
+    sequencer.writeCallbackScFail(address, cache_entry.DataBlk);
+  }
+
+  action(htx_load_conflict, "\htx",
+         desc="Notify sequencer that transactional access failed") {
+      if (getState(tbe, cache_entry, address) == State:I) {
+        // We can only get here theough validation over 
+        // I state block
+        // We can put dummy info into this callback,
+        // except the address
+        // This is checked inside the function
+        sequencer.invalidCallback(address, tbe.DataBlk, false);
+      } else {
+        assert(is_valid(cache_entry));
+        assert(is_valid(tbe));
+        peek(messgeBuffer_in, CoherenceMsg) {
+          APPEND_TRANSITION_COMMENT("Nacker: ");
+          APPEND_TRANSITION_COMMENT(in_msg.Sender);
+          APPEND_TRANSITION_COMMENT(" TS: ");
+          APPEND_TRANSITION_COMMENT(in_msg.Timestamp);
+          sequencer.failedCallback(address,
+                                   cache_entry.DataBlk,
+                                   in_msg.Timestamp,
+                                   in_msg.Transactional,
+                                   in_msg.transactionalPriority,
+                                   in_msg.swTransactionalPriority,
+                                   in_msg.Sender,
+                                   false);
+      }
+      }
+      
+  }
+
+  action(hhx_store_conflict, "\hhx",
+         desc="Notify sequencer that transactional access failed") {
+      if (getState(tbe, cache_entry, address) == State:I) {
+        // We can only get here theough validation over 
+        // I state block
+        // We can put dummy info into this callback,
+        // except the address
+        // This is checked inside the function
+        sequencer.invalidCallback(address, tbe.DataBlk, true);
+      } else {
+        if (getState(tbe, cache_entry, address) != State:FD_V) {
+          assert(is_valid(cache_entry));
+          assert(is_valid(tbe));
+        }
+        peek(messgeBuffer_in, CoherenceMsg) {
+            APPEND_TRANSITION_COMMENT("Nacker: ");
+            APPEND_TRANSITION_COMMENT(in_msg.Sender);
+            APPEND_TRANSITION_COMMENT(" TS: ");
+            APPEND_TRANSITION_COMMENT(in_msg.Timestamp);
+            sequencer.failedCallback(address, cache_entry.DataBlk,
+                                    in_msg.Timestamp,
+                                    in_msg.Transactional,
+                                    in_msg.transactionalPriority,
+                                    in_msg.swTransactionalPriority,
+                                    in_msg.Sender,
+                                    true);
+        }
+      }
+  }
+
+  action(nin_notify_illegal_nack, "\nin",
+         desc="Notify sequencer that failure is due to illegal nack") {
+      // Let transactional manager that tx failure is due to illegal 
+      // nack received from remote. See line 550
+      xact_mgr.notifyIllegalFailure();
+  }
+
+  // prefetching
+
+  action(pa_issuePfGETS, "pa", desc="Issue prefetch GETS") {
+    peek(optionalQueue_in, RubyRequest) {
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:GETS;
+        out_msg.Sender := machineID;
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
+                address, out_msg.Dest);
+        out_msg.MessageSize := MessageSizeType:Control;
+        out_msg.Prefetch := in_msg.Prefetch;
+        out_msg.AccessMode := in_msg.AccessMode;
+        if (in_msg.htmFromTransaction) {
+          out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+          out_msg.Transactional := in_msg.Transactional;
+          out_msg.transactionalPriority := in_msg.transactionalPriority;
+          out_msg.swTransactionalPriority := in_msg.swTransactionalPriority;
+          APPEND_TRANSITION_COMMENT(" trans");
+	} else {
+           out_msg.Timestamp := curCycle();
+        }
+        APPEND_TRANSITION_COMMENT(" TS: ");
+        APPEND_TRANSITION_COMMENT(out_msg.Timestamp);
+      }
+    }
+  }
+
+  action(pb_issuePfGETX, "pb", desc="Issue prefetch GETX") {
+    peek(optionalQueue_in, RubyRequest) {
+      enqueue(requestNetwork_out, CoherenceMsg, Dcache.getTagLatency()) {
+        out_msg.addr := address;
+        out_msg.Class := CoherenceClass:GETX;
+        out_msg.Sender := machineID;
+        DPRINTF(RubySlicc, "%s\n", machineID);
+        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+
+        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
+                address, out_msg.Dest);
+        out_msg.MessageSize := MessageSizeType:Control;
+        out_msg.Prefetch := in_msg.Prefetch;
+        out_msg.AccessMode := in_msg.AccessMode;
+        if (in_msg.htmFromTransaction) {
+            // Exclusive prefetches also need to be tagged as
+            // transactional for correct writeback of consistent
+            // values to shared cache
+          out_msg.Timestamp := xact_mgr.getOldestTimestamp();
+          out_msg.Transactional := in_msg.Transactional;
+          out_msg.transactionalPriority := in_msg.transactionalPriority;
+          out_msg.swTransactionalPriority := in_msg.swTransactionalPriority;
+          APPEND_TRANSITION_COMMENT(" trans");
+	} else {
+           out_msg.Timestamp := curCycle();
+        }
+        APPEND_TRANSITION_COMMENT(" TS: ");
+        APPEND_TRANSITION_COMMENT(out_msg.Timestamp);
+      }
+    }
+  }
+
+  action(pq_popPrefetchQueue, "\pq", desc="Pop the prefetch request queue") {
+    optionalQueue_in.dequeue(clockEdge());
+  }
+
+  action(mp_markPrefetched, "mp", desc="Write data from response queue to cache") {
+      assert(is_valid(cache_entry));
+      cache_entry.isPrefetched := true;
+  }
+
+  action(po_observeMiss, "\po", desc="Inform the prefetcher about a cache miss") {
+    peek(mandatoryQueue_in, RubyRequest) {
+      if (enable_prefetch) {
+        prefetcher.observeMiss(in_msg.LineAddress, in_msg.Type);
+      }
+    }
+  }
+
+  action(ppm_observePfMiss, "\ppm",
+         desc="Inform the prefetcher about a cache miss with in-flight prefetch") {
+    peek(mandatoryQueue_in, RubyRequest) {
+      prefetcher.observePfMiss(in_msg.LineAddress);
+    }
+  }
+
+  action(pph_observePfHit, "\pph",
+         desc="Inform the prefetcher if a cache hit was the result of a prefetch") {
+    peek(mandatoryQueue_in, RubyRequest) {
+      if (cache_entry.isPrefetched) {
+        prefetcher.observePfHit(in_msg.LineAddress);
+        cache_entry.isPrefetched := false;
+      }
+    }
+  }
+
+  action(z_stallAndWaitOptionalQueue, "\pz", desc="recycle prefetch request queue") {
+    stall_and_wait(optionalQueue_in, address);
+  }
+  action(ars_sanityAllowReadSetLowerLevelCacheEvictions, "\ars", desc="") {
+      assert(xact_mgr.checkReadSignature(address));
+      if (!is_valid(cache_entry)) {
+          assert(xact_mgr.config_allowReadSetL0CacheEvictions());
+      } else { // Possible if a) refetching, b) not precise Rset tracking
+          assert(xact_mgr.config_allowReadSetL0CacheEvictions() ||
+                 !xact_mgr.config_preciseReadSetTracking());
+      }
+  }
+
+  action(hsdt_handleStaleDataInTransactions, "\hftm^",
+         desc="Fail transaction due to memory conflict") {
+      // Either not using reload_if_stale (requires precise rsets) or
+      // too many reloads (potential livelock): Abort transaction.
+
+      // NOTE: the transaction will anyways abort because of
+      // forward_eviction_to_cpu (next action), which lets the CPU
+      // know that there was a conflict with an outstanding load in
+      // the LSQ. However, we want to classify the abort as "stale
+      // data", so call xactReplacement to set setAbortFlag passing as
+      // "source" an invalid machineID(L1Cache,NumL1Caches) to
+      // indicate "stale data".
+      assert(xact_mgr.checkWriteSignature(address) == false);
+      assert(is_valid(tbe));
+      if (tbe.HtmFromTransaction) { // Transactional load
+          xact_mgr.xactReplacement(address,machineID,
+                                   false/*capacity*/,
+                                   true /*stale*/);
+          DPRINTF(RubyHTM,
+                  "Aborting transaction due to conflict on pending load addr=0x%lx\n",
+                  address);
+      }
+  }
+
+  action(hcr_handleConsumedReplacement, "\hcr^",
+         desc="Fail transaction due to replacement of consumed block") {
+      // We need this action, else there is a super hidden corner case
+      // where the block get evicted before being added to the rs
+      // and transaction is not aborting. This can happen and is 
+      // totally legit as an instruction fetch can arrive just
+      // before adding block to read set, but will be added to
+      // forwarding buffer. This instfetch cause eviction of the block
+      // but as it is not part of rs yet, it will continue and
+      // for some reason it is not added to rs in prec_rs
+      // TODO: check why it is not added to rs maybe something
+      // related to the replacement?
+      assert(is_valid(cache_entry));
+      assert(xact_mgr.isBlockConsumed(address));
+      // Always abort, replacement of consumed data in L0 is not
+      // allowed
+      xact_mgr.xactReplacement(address,machineID,
+                                   true/*capacity*/,
+                                   false /*stale*/,
+                                   true /*spec*/);
+      DPRINTF(RubyHTM,
+        "Aborting transaction due to eviction of consumed data addr=0x%lx\n",
+        address);
+      
+  }
+
+  //*****************************************************
+  // TRANSITIONS
+  //*****************************************************
+
+  // Transitions for Load/Store/Replacement/WriteBack from transient states
+  transition({Inst_IS, IS, IM, SM, FD_V}, {Load, Ifetch, Store, L0_Replacement, L0_Replacement_Rset, L0_Replacement_Wset}) {
+    z_stallAndWaitMandatoryQueue;
+  }
+
+  // Transitions from Idle
+  transition(I, Load, IS) {
+    oo_allocateDCacheBlock;
+    i_allocateTBE;
+    a_issueGETS;
+    uu_profileDataMiss;
+    po_observeMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition(I, Ifetch, Inst_IS) {
+    pp_allocateICacheBlock;
+    i_allocateTBE;
+    a_issueGETS;
+    uu_profileInstMiss;
+    po_observeMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition(I, {Store, FirstTxStore}, IM) {
+    oo_allocateDCacheBlock;
+    i_allocateTBE;
+    b_issueGETX;
+    uu_profileDataMiss;
+    po_observeMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition({I, Inst_IS}, {InvOwn, InvElse}) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition({IS, IM}, InvOwn) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition({IS, IM}, InvElse) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition(SM, InvOwn, IM) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition(SM, InvElse, IM) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  // Transitions from Shared
+  transition({S,E,M}, Load) {
+    h_load_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition({S,E,M}, Ifetch) {
+    h_ifetch_hit;
+    uu_profileInstHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition(S, {Store, FirstTxStore}, SM) {
+    i_allocateTBE;
+    c_issueUPGRADE;
+    uu_profileDataMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition(S, {L0_Replacement,PF_L0_Replacement}, I) {
+    forward_eviction_to_cpu;
+    ff_deallocateCacheBlock;
+  }
+
+  transition(S, {L0_Replacement_Rset}, I) {
+      // DO NOT forward eviction to CPU: this event is only issued
+      // when Rset evitions allowed. Otherwise, O3CPU incorrectly
+      // treats Rset replacement as conflict (see NOTE in
+      // "forward_eviction_to_cpu"). Subsequent Invs will be detected
+      // by the xact_mgr (via shouldNackStore) and abort. 
+    //forward_eviction_to_cpu;
+    ff_deallocateCacheBlock;
+  }
+
+  transition(S, InvOwn, I) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition(S, InvElse, I) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  // Transitions from Exclusive
+  transition(E, {Store, FirstTxStore}, M) {
+    hh_store_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition(M, Store, M) {
+    hh_store_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition(M, FirstTxStore) {
+    // No need to keep non-spec. data in TBE until writeback
+    // completes (no deadlock possible, unlike Two-level protocol):
+    // Buffer resources between L0 and L1 guarantee that this
+    // PUTXCOPY will make progress (processed by L1) regardless of
+    // racing remote requests for this block that may be blocked by
+    // L1 until this writeback from L0 completes
+    gxc_issuePUTXCOPY;   // writeback data, and keep M copy
+    hh_store_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition(E, {L0_Replacement,PF_L0_Replacement}, I) {
+    forward_eviction_to_cpu;
+    g_issuePUTE;
+    ff_deallocateCacheBlock;
+  }
+
+  transition(E, {InvElse, Fwd_GETX}, I) {
+    // don't send data
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition(E, InvOwn, I) {
+    // don't send data
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition({FD,FD_V}, InvOwn, I) {
+    // don't send data
+    hcr_handleConsumedReplacement;
+    forward_eviction_to_cpu;
+    fi_sendInvAck;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition(E, {Fwd_GETS, Fwd_GET_INSTR}, S) {
+    f_sendDataToL1;
+    l_popRequestQueue;
+  }
+
+  // Transitions from Modified
+  transition(M, {L0_Replacement,PF_L0_Replacement}, I) {
+    forward_eviction_to_cpu;
+    g_issuePUTX;
+    ff_deallocateCacheBlock;
+  }
+
+  transition(M, {L0_Replacement_Wset_Discard}, I) {
+    // Abort + do not writeback speculative data
+    forward_eviction_to_cpu;
+    ff_deallocateCacheBlock;
+  }
+
+  transition(M, {L0_Replacement_Rset}, I) {
+    gxc_issuePUTXCOPY;   // writeback dirty data, force L1 to forward all traffic by staying as exclusive
+    ff_deallocateCacheBlock;
+  }
+
+  transition(E, {L0_Replacement_Rset}, I) {
+    ff_deallocateCacheBlock;
+  }
+
+  transition(M, InvOwn, I) {
+    forward_eviction_to_cpu;
+    f_sendDataToL1;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition(M, {L0_Replacement_Wset}, I) {
+    g_issuePUTX;
+    ff_deallocateCacheBlock;
+  }
+
+  transition(E, {L0_Replacement_Wset}, I) {
+    g_issuePUTE;
+    ff_deallocateCacheBlock;
+  }
+
+  transition({E,M}, {InvOwn_Rset, InvOwn_Wset}, I) {
+    f_sendDataToL1;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+  transition(S, {InvOwn_Rset, InvOwn_Wset}, I) {
+    fi_sendInvAck;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition(I, {InvOwn_Rset, InvOwn_Wset}) {
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition({IS, IM, Inst_IS}, {InvOwn_Rset, InvOwn_Wset}) {
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition({SM}, {InvOwn_Rset}, IM) {
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition({I,IS,IM,Inst_IS}, {Fwd_GETS}) { // Previously invalidated upon abort
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition(M, {Fwd_GETS_Discard, Inv_Discard}, MD) {
+    forward_eviction_to_cpu;
+    fi_sendInvAck; // Send ack instead of data
+    // ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition(I, {Fwd_GETS_Discard, Inv_Discard}) {
+      // Wset L0 replacement raced with L1 replacement, and L0 has
+      // already invalidated line when Inv from L1 arrives
+    forward_eviction_to_cpu;
+    fi_sendInvAck; // Send ack instead of data
+    l_popRequestQueue;
+  }
+
+  transition({I,IS,IM,SM,S,E,M,FD,FD_V}, {InvElse_X, Fwd_GETS_X}) {
+    fn_sendInvNack;
+    l_popRequestQueue;
+  }
+
+  transition({MD}, {Ifetch, Load}) {
+    h_load_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+  transition(MD, Store) {
+    hh_store_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition(M, {InvElse, Fwd_GETX}, I) {
+    forward_eviction_to_cpu;
+    f_sendDataToL1;
+    ff_deallocateCacheBlock;
+    l_popRequestQueue;
+  }
+
+  transition(M, {Fwd_GETS, Fwd_GET_INSTR}, S) {
+    f_sendDataToL1;
+    l_popRequestQueue;
+  }
+
+  transition(IS, Data, S) {
+    u_writeDataToCache;
+    hx_load_hit;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(IS, Nack, I) {
+    htx_load_conflict;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition({SM,IM,IS}, Nack_Spec, FD) {
+    u_writeDataToCache;
+    nfd_notifyForwardedData;
+    hhxs_store_hit_consumedBlock;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(IS, Nack_Spec_Illegal_Rtry) {
+    ar_reissueGETS;
+    irsi_incTBEHtmNumReloadsIllegal;
+    o_popIncomingResponseQueue;
+  }
+
+  transition({SM,IM,FD_V}, Nack_Spec_Illegal_Rtry) {
+    arx_reissueGETX;
+    irsi_incTBEHtmNumReloadsIllegal;
+    o_popIncomingResponseQueue;
+  }
+
+  // Transitions from Exclusive
+  transition(FD, {Store, FirstTxStore}) {
+    hh_store_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+  transition(FD, {Load}) {
+    h_load_hit;
+    uu_profileDataHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition(FD, Ifetch) {
+    h_ifetch_hit;
+    uu_profileInstHit;
+    pph_observePfHit;
+    k_popMandatoryQueue;
+  }
+
+  transition(FD, ConsumerValidation, FD_V) {
+    i_allocateTBE;
+    b_issueGETX;
+    uu_profileDataMiss;
+    po_observeMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition({FD,FD_V}, {Inv_Discard,InvElse}) {
+    // This consumer is aborting after observing write from producer
+    // on block that was read by this consumer, then relinquished
+    fi_sendInvAck; // Send ack 
+    l_popRequestQueue;
+  }
+
+  transition(FD, L0_Replacement, I) {
+    hcr_handleConsumedReplacement;
+    forward_eviction_to_cpu;
+    // Do not send the copy to L1
+    //g_issuePUTX;
+    ff_deallocateCacheBlock;
+  }
+
+  transition(I, ConsumerValidation) {
+    // At this point validation was issued and enqueued
+    // but before the event was served an abort occurred
+    // so state will be invalid and validation should be 
+    // ignored
+    hhx_store_conflict;
+    // Do store_hit to remove from req_list and delete 
+    // msg and pkt
+    k_popMandatoryQueue;
+  }
+
+  transition(FD_V, Nack, FD) {
+    // Got nack without data: no validation possible
+    hhx_store_conflict;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(FD_V, Nack_Spec, FD) {
+    // Got nack: Check if Data matches consumed value, will keep retrying
+    vcd_validateConsumedData;
+    hhxs_store_hit_consumedBlock;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(FD_V, Data_Exclusive, M) {
+    // Got data+permission: Check if Data matches consumed value
+    vcd_validateConsumedData;
+    hhxs_store_hit_consumedBlock; // Need to callback to remove from "consumed blocks", but no CPU callback
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+  
+  transition(IS, Data_Exclusive, E) {
+    u_writeDataToCache;
+    hx_load_hit;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(IS, Data_Stale, I) {
+    hsdt_handleStaleDataInTransactions;
+    u_writeDataToCache;
+    forward_eviction_to_cpu;
+    hx_load_hit;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(IS, Data_Stale_HtmReload) {
+    ar_reissueGETS;
+    irs_incTBEHtmNumReloads;
+    o_popIncomingResponseQueue;
+  }
+
+  transition(Inst_IS, Data, S) {
+    u_writeInstToCache;
+    hx_ifetch_hit;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(Inst_IS, Data_Exclusive, E) {
+    u_writeInstToCache;
+    hx_ifetch_hit;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(Inst_IS, Data_Stale, I) {
+    hsdt_handleStaleDataInTransactions;
+    u_writeInstToCache;
+    hx_ifetch_hit;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(Inst_IS, Nack, I) {
+    htx_load_conflict;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition({IM,SM}, Data_Exclusive, M) {
+    u_writeDataToCache;
+    hhx_store_hit;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+  
+  transition(SM, Nack, I) {
+    hhx_store_conflict;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(IM, Nack, I) {
+    hhx_store_conflict;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  // Illegal nack notification actions
+  transition(SM, Nack_illegal, I) {
+    hhx_store_conflict;
+    nin_notify_illegal_nack;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(IM, Nack_illegal, I) {
+    hhx_store_conflict;
+    nin_notify_illegal_nack;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(IS, Nack_illegal, I) {
+    htx_load_conflict;
+    nin_notify_illegal_nack;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+    transition(FD_V, Nack_illegal, FD) {
+    // Got nack without data: no validation possible
+    hhx_store_conflict;
+    nin_notify_illegal_nack;
+    s_deallocateTBE;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+    transition(Inst_IS, Nack_illegal, I) {
+    htx_load_conflict;
+    nin_notify_illegal_nack;
+    s_deallocateTBE;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+
+  // store conditionals
+
+  transition({I,S,E,M}, Failed_SC) {
+    // IS,IM,SM don't handle store conditionals
+    hhc_storec_fail;
+    k_popMandatoryQueue;
+  }
+
+  // prefetcher
+
+  transition({Inst_IS, IS, IM, SM, PF_Inst_IS, PF_IS, PF_IE}, PF_L0_Replacement) {
+     z_stallAndWaitOptionalQueue;
+  }
+
+  transition({PF_Inst_IS, PF_IS}, {Store, L0_Replacement}) {
+    z_stallAndWaitMandatoryQueue;
+  }
+
+  transition({PF_IE}, {Load, Ifetch, L0_Replacement}) {
+    z_stallAndWaitMandatoryQueue;
+  }
+
+  transition({S,E,M,Inst_IS,IS,IM,SM,PF_Inst_IS,PF_IS,PF_IE},
+             {PF_Load, PF_Store, PF_Ifetch}) {
+      pq_popPrefetchQueue;
+  }
+
+  transition(I, PF_Load, PF_IS) {
+    oo_allocateDCacheBlock;
+    i_allocateTBE;
+    pa_issuePfGETS;
+    pq_popPrefetchQueue;
+  }
+
+  transition(PF_IS, Load, IS) {
+    uu_profileDataMiss;
+    ppm_observePfMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition(I, PF_Ifetch, PF_Inst_IS) {
+    pp_allocateICacheBlock;
+    i_allocateTBE;
+    pa_issuePfGETS;
+    pq_popPrefetchQueue;
+  }
+
+  transition(PF_Inst_IS, Ifetch, Inst_IS) {
+    uu_profileInstMiss;
+    ppm_observePfMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition(I, PF_Store, PF_IE) {
+    oo_allocateDCacheBlock;
+    i_allocateTBE;
+    pb_issuePfGETX;
+    pq_popPrefetchQueue;
+  }
+
+  transition(PF_IE, Store, IM) {
+    uu_profileDataMiss;
+    ppm_observePfMiss;
+    k_popMandatoryQueue;
+  }
+
+  transition({PF_Inst_IS, PF_IS, PF_IE}, {InvOwn, InvElse}) {
+    fi_sendInvAck;
+    l_popRequestQueue;
+  }
+
+  transition(PF_IS, Data, S) {
+    u_writeDataToCache;
+    s_deallocateTBE;
+    mp_markPrefetched;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(PF_IS, Data_Exclusive, E) {
+    u_writeDataToCache;
+    s_deallocateTBE;
+    mp_markPrefetched;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(PF_IS, Data_Stale, I) {
+    u_writeDataToCache;
+    s_deallocateTBE;
+    mp_markPrefetched;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(PF_Inst_IS, Data_Stale, I) {
+    u_writeDataToCache;
+    s_deallocateTBE;
+    mp_markPrefetched;
+    ff_deallocateCacheBlock;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(PF_Inst_IS, Data, S) {
+    u_writeInstToCache;
+    s_deallocateTBE;
+    mp_markPrefetched;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(PF_Inst_IS, Data_Exclusive, E) {
+    u_writeInstToCache;
+    s_deallocateTBE;
+    mp_markPrefetched;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(PF_IE, Data_Exclusive, E) {
+    u_writeDataToCache;
+    s_deallocateTBE;
+    mp_markPrefetched;
+    o_popIncomingResponseQueue;
+    kd_wakeUpDependents;
+  }
+
+  transition(I, PF_Bad_Addr) {
+    pq_popPrefetchQueue;
+  }
+
+  transition(I, {L0_Replacement,PF_L0_Replacement}) {
+    ff_deallocateCacheBlock;
+  }
+
+  transition({E,M}, InvOwn_X) {
+    fn_sendInvNack;
+    l_popRequestQueue;
+  }
+
+  // Invalidations on evicted transactional blocks are only possible
+  // if allowReadSetL0CacheEvictions enabled
+  transition({I,IS}, InvOwn_X) {
+    ars_sanityAllowReadSetLowerLevelCacheEvictions;
+    fn_sendInvNack;
+    l_popRequestQueue;
+  }
+}

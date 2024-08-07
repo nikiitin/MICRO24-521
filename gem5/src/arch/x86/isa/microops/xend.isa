@@ -1,0 +1,181 @@
+
+def template MicroXendExecute {{
+    Fault %(class_name)s::execute(ExecContext * xc,
+            Trace::InstRecord * traceData) const
+    {
+        Fault fault = NoFault;
+
+        %(evdec)s;
+        %(vardec)s;
+        %(code_exe)s;
+
+        return NoFault;
+    }
+}};
+
+def template MicroXendInitiateAcc {{
+    Fault %(class_name)s::initiateAcc(ExecContext * xc,
+            Trace::InstRecord * traceData) const
+    {
+        Fault fault = NoFault;
+
+        %(evdec)s;
+        %(vardec)s;
+
+        const uint64_t htm_depth = xc->getHtmTransactionalDepth();
+
+        // sanity check
+        if (!xc->inHtmTransactionalState()) {
+            fault = std::make_shared<GenericISA::M5PanicFault>(
+                        "xend but context not in transaction!\\n");
+        }
+
+        DPRINTF(X86, "rtm depth is %d\n", htm_depth);
+
+        Request::Flags memAccessFlags =
+            Request::STRICT_ORDER|Request::PHYSICAL|Request::HTM_COMMIT;
+
+        // Nested transaction start/stops never leave the core.
+        // These Requests are marked as NO_ACCESS to indicate that the request
+        // should not be sent to the cache controller.
+        if (htm_depth > 1) {
+            memAccessFlags = memAccessFlags | Request::NO_ACCESS;
+        }
+
+        fault = xc->initiateHtmCmd(memAccessFlags);
+
+        return fault;
+    }
+}};
+
+def template MicroXendCompleteAcc {{
+    Fault %(class_name)s::completeAcc(PacketPtr pkt, ExecContext *xc,
+            Trace::InstRecord *traceData) const
+    {
+        Fault fault = NoFault;
+
+        %(vardec)s;
+        %(dest_var_dec)s;
+
+        Rax = xc->tcBase()->getHtmCommitStatus();
+
+        %(code_cmp)s;
+
+
+        return NoFault;
+    }
+}};
+
+def template MicroXendOpDeclare {{
+    class %(class_name)s : public X86ISA::X86MicroopBase
+    {
+      private:
+        RegId srcRegIdxArr[0]; RegId destRegIdxArr[1];
+      protected:
+        const Request::FlagsType memFlags;
+
+      public:
+        %(class_name)s(ExtMachInst _machInst,
+                const char * instMnem,
+                uint64_t setFlags,
+                Request::FlagsType _memFlags);
+        Fault execute(ExecContext *, Trace::InstRecord *) const override;
+        Fault initiateAcc(ExecContext *, Trace::InstRecord *) const override;
+        Fault completeAcc(PacketPtr, ExecContext *,
+                          Trace::InstRecord *) const override;
+    };
+}};
+
+def template MicroXendOpConstructor {{
+    %(class_name)s::%(class_name)s(
+            ExtMachInst machInst, const char * instMnem, uint64_t setFlags,
+            Request::FlagsType _memFlags) :
+        %(base_class)s(machInst, "%(mnemonic)s", instMnem,
+                       setFlags, MemReadOp),
+                       memFlags(_memFlags)
+    {
+            setRegIdxArrays(
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::srcRegIdxArr),
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::destRegIdxArr));
+        _numSrcRegs = 0;
+        _numDestRegs = 0;
+        _numFPDestRegs = 0;
+        _numIntDestRegs = 0;
+        _numCCDestRegs = 0;
+        flags[IsHtmStop] = true;
+        flags[IsLoad] = true;
+        //flags[IsMemRef] = true;
+        flags[IsMicroop] = true;
+        flags[IsNonSpeculative] = true;
+        // Adding this by hand is hazardous and ugly
+        // We should define it in standard way
+        setDestRegIdx(_numDestRegs++, RegId(IntRegClass, X86ISA::INTREG_RAX));
+        _numIntDestRegs++;
+        flags[IsInteger] = true;;
+    }
+}};
+
+
+let {{
+
+    # Make these empty strings so that concatenating onto
+    # them will always work.
+    header_output = ""
+    decoder_output = ""
+    exec_output = ""
+    # We should check this definition...
+    # it is not wrong but does not follow
+    # definition convention and is hard to add
+    # something here...
+    def defineMicroXendOp(mnemonic, mem_flags="0"):
+        global header_output
+        global decoder_output
+        global exec_output
+        global microopClasses
+        Name = mnemonic
+        name = mnemonic.lower()
+
+        # Build up the all register version of this micro op
+        iops = [InstObjParams(name, Name, 'X86ISA::X86MicroopBase',
+            {"evdec" : '',
+            "dest_var_dec" : '''
+                int64_t Rax = 0;
+                ''',
+            "vardec" : '''
+            ''',
+            "code_exe": '',
+            "code_cmp": '''
+                RegVal final_val = Rax;
+                xc->setIntRegOperand(this, 0, final_val);
+            '''}
+            )]
+
+        for iop in iops:
+            header_output += MicroXendOpDeclare.subst(iop)
+            decoder_output += MicroXendOpConstructor.subst(iop)
+            exec_output += MicroXendExecute.subst(iop)
+            exec_output += MicroXendInitiateAcc.subst(iop)
+            exec_output += MicroXendCompleteAcc.subst(iop)
+
+        class TxnOp(X86Microop):
+            def __init__(self):
+                self.className = Name
+                self.mnemonic = name
+                self.memFlags = mem_flags
+
+            def getAllocator(self, microFlags):
+                allocator = '''new %(class_name)s(machInst, macrocodeBlock,
+                        %(flags)s, %(memFlags)s)''' % {
+                    "class_name" : self.className,
+                    "mnemonic" : self.mnemonic,
+                    "flags" : self.microFlagsText(microFlags),
+                    "memFlags" : self.memFlags}
+                return allocator
+
+        microopClasses[name] = TxnOp
+
+    defineMicroXendOp('Xend')
+}};
+

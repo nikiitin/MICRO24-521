@@ -1,0 +1,42 @@
+ARCH := x86
+BIN_OUTDIR := bin
+
+CC := gcc
+
+# gem5 hooks library
+GEM5_ROOT := ../../../..
+M5 := $(GEM5_ROOT)/build/$(ARCH)/out/m5
+
+TEST_OBJS := sumarray.o env.o
+TEST_PROGS := sumarray
+
+CFLAGS   := -g -std=c11 -O2 # -march=native
+
+# Enable m5 instrumentation for creating checkpoint at beginning of ROI
+CFLAGS    += -DENABLE_M5_TRIGGER
+
+# Link m5 to your code https://www.gem5.org/documentation/general_docs/m5ops/
+CFLAGS += -I$(GEM5_ROOT)/include
+CFLAGS += -I$(GEM5_ROOT)  # To locate "util/m5/src/m5_mmap.h"
+LDFLAGS += -L$(GEM5_ROOT)/util/m5/build/$(ARCH)/out -lm5
+
+# ==== Rules ==================================================================
+
+.PHONY: default clean
+
+default: $(TEST_PROGS)
+
+clean:
+	$(RM)  $(TEST_OBJS) $(TEST_PROGS) $(BIN_OUTDIR)/$(ARCH)/*
+
+$(TEST_PROGS): $(TEST_OBJS) $(M5)
+	mkdir -p $(BIN_OUTDIR)/$(ARCH) && $(CC) -static -L. -pthread $(TEST_OBJS) $(GEM5_OBJS) $(LDFLAGS) -o $(BIN_OUTDIR)/$(ARCH)/$@
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $*.c
+
+run_native:
+	./$(BIN_OUTDIR)/$(ARCH)/$(TEST_PROGS)
+
+$(M5):
+	cd $(GEM5_ROOT)/util/m5 && scons build/$(ARCH)/out/m5

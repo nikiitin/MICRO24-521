@@ -1,0 +1,356 @@
+// Author: Ruben Titos
+
+// XBEGIN instruction
+
+def template XbeginDeclare {{
+    class %(class_name)s : public %(base_class)s
+    {
+      private:
+        %(reg_idx_arr_decl)s;
+
+      public:
+        // Constructor.
+        %(class_name)s(ExtMachInst machInst);
+        Fault execute(ExecContext *, Trace::InstRecord *) const override;
+        Fault initiateAcc(ExecContext *, Trace::InstRecord *) const override;
+        Fault completeAcc(PacketPtr, ExecContext *,
+                          Trace::InstRecord *) const override;
+    };
+}};
+
+def template XbeginExecute {{
+    Fault %(class_name)s::execute(ExecContext * xc,
+            Trace::InstRecord * traceData) const
+    {
+            Fault fault = NoFault;
+
+            %(fp_enable_check)s;
+            %(op_decl)s;
+            %(op_rd)s;
+
+
+            if(fault == NoFault)
+            {
+                %(op_wb)s;
+            }
+            return fault;
+
+    }
+}};
+
+def template XbeginInitiateAcc {{
+    Fault %(class_name)s::initiateAcc(ExecContext * xc,
+            Trace::InstRecord * traceData) const
+    {
+        uint64_t xbeginFlags = 0x0;
+        %(op_src_decl)s;
+        %(op_rd)s;
+        %(code)s;
+        Fault fault = NoFault;
+        const uint64_t htm_depth = xc->getHtmTransactionalDepth();
+
+        DPRINTF(X86, "rtm depth is %d\n", htm_depth);
+
+        // Maximum RTM nesting depth exceeded
+        if (htm_depth > X86ISA::HTMCheckpoint::MAX_HTM_DEPTH) {
+            const uint64_t htm_uid = xc->getHtmTransactionUid();
+            fault = std::make_shared<GenericHtmFailureFault>(
+            htm_uid, HtmFailureFaultCause::NEST);
+        }
+        DPRINTF(X86, "rtm fault is %s\n", fault);
+
+        uint64_t txType = xbeginFlags & 0xFFFF;
+            DPRINTF(X86, "txType is %d\n", txType);
+        long tmTag = xbeginFlags >> 16;
+            DPRINTF(X86, "HtmXid- xbegininitiate: %d\n", tmTag);
+        if (fault == NoFault) {
+            Request::Flags memAccessFlags =
+                Request::STRICT_ORDER|Request::PHYSICAL|Request::HTM_START;
+
+            // Nested transaction start/stops never leave the core.
+            // These Requests are marked as NO_ACCESS to indicate that the
+            // request should not be sent to the cache controller.
+            if (htm_depth > 1) {
+                memAccessFlags = memAccessFlags | Request::NO_ACCESS;
+            }
+            if (txType == 0x00000001) {
+                memAccessFlags = memAccessFlags | Request::HTM_POWER;
+            }
+            fault = xc->initiateHtmCmd(memAccessFlags, tmTag);
+        }
+        return fault;
+    }
+}};
+
+def template XbeginCompleteAcc {{
+    Fault %(class_name)s::completeAcc(PacketPtr pkt, ExecContext *xc,
+            Trace::InstRecord *traceData) const
+    {
+        uint64_t xbeginFlags = 0x0;
+        %(op_src_decl)s;
+        %(op_rd)s;
+        %(code)s;
+        Fault fault = NoFault;
+        uint64_t Dest64 = 0;
+        ThreadContext *tc = xc->tcBase();
+        const uint64_t htm_depth = xc->getHtmTransactionalDepth();
+
+        // sanity check
+        if (!xc->inHtmTransactionalState()) {
+            fault = std::make_shared<GenericISA::M5PanicFault>(
+                        "xbegin completed but context not in transaction!\\n");
+        }
+
+        if (fault == NoFault) {
+            Dest64 = (~0u); // XBEGIN_STARTED on success
+
+            uint64_t txType = xbeginFlags;
+            DPRINTF(X86, "txType is %d\n", txType);
+            // checkpointing occurs in the outer transaction only
+            if (htm_depth == 1) {
+                BaseHTMCheckpointPtr& cpt =
+                   xc->tcBase()->getHtmCheckpointPtr();
+
+                HTMCheckpoint *x86cpt =
+                    dynamic_cast<HTMCheckpoint*>(cpt.get());
+                assert(x86cpt != nullptr);
+
+                x86cpt->save(tc);
+
+                if (tc->forceHtmDisabled()) {
+                   // Speculation disabled/lockstep mode replay
+                   fault = std::make_shared<GenericHtmFailureFault>(
+                                           xc->getHtmTransactionUid(),
+                                           HtmFailureFaultCause::DISABLED);
+                }
+            }
+
+            uint64_t final_val = Dest64;
+            if (traceData) { traceData->setData(final_val); }
+        }
+        return fault;
+    }
+}};
+
+output header {{
+    class XbeginInst : public X86ISA::X86StaticInst
+    {
+      public:
+        static const RegIndex foldOBit = 0;
+        /// Constructor
+        XbeginInst(const char *_mnemonic, ExtMachInst _machInst,
+                OpClass __opClass) :
+            X86ISA::X86StaticInst(_mnemonic, _machInst, __opClass)
+        {
+            flags[IsHtmStart] = true;
+            flags[IsInteger] = true;
+            flags[IsLoad] = true;
+            //flags[IsMemRef] = true;
+            flags[IsMicroop] = true;
+            flags[IsNonSpeculative] = true;
+        }
+
+        std::string generateDisassembly(Addr pc,
+                const loader::SymbolTable *symtab) const override;
+    };
+}};
+
+output decoder {{
+    std::string
+    XbeginInst::generateDisassembly(
+            Addr PC, const loader::SymbolTable *symtab) const
+    {
+        std::stringstream response;
+
+        printMnemonic(response, mnemonic);
+        return response.str();
+    }
+}};
+
+def format XbeginInst(code, *opt_flags) {{
+    iop = InstObjParams(name, Name, 'XbeginInst', code, opt_flags)
+    header_output = XbeginDeclare.subst(iop)
+    decoder_output = BasicConstructor.subst(iop)
+    decode_block = BasicDecode.subst(iop)
+    exec_output = XbeginExecute.subst(iop)
+    exec_output += XbeginInitiateAcc.subst(iop)
+    exec_output += XbeginCompleteAcc.subst(iop)
+}};
+
+
+// XABORT instruction
+
+def template XabortDeclare {{
+    class %(class_name)s : public %(base_class)s
+    {
+      private:
+        %(reg_idx_arr_decl)s;
+
+      public:
+        // Constructor.
+        %(class_name)s(ExtMachInst machInst);
+        Fault execute(ExecContext *, Trace::InstRecord *) const override;
+        Fault initiateAcc(ExecContext *, Trace::InstRecord *) const override;
+        Fault completeAcc(PacketPtr, ExecContext *,
+                          Trace::InstRecord *) const override;
+    };
+}};
+
+def template XabortInitiateAcc {{
+    Fault %(class_name)s::initiateAcc(ExecContext * xc,
+            Trace::InstRecord * traceData) const
+    {
+        Fault fault = NoFault;
+
+        // sanity check
+        if (!xc->inHtmTransactionalState()) {
+            fault = std::make_shared<GenericISA::M5PanicFault>(
+                        "xabort but context not in transaction!\\n");
+        }
+
+        Request::Flags memAccessFlags =
+            Request::STRICT_ORDER|Request::PHYSICAL|Request::HTM_CANCEL;
+
+        fault = xc->initiateHtmCmd(memAccessFlags);
+
+        return fault;
+    }
+}};
+
+def template XabortCompleteAcc {{
+    Fault %(class_name)s::completeAcc(PacketPtr pkt, ExecContext *xc,
+            Trace::InstRecord *traceData) const
+    {
+
+        auto rtm_checkpoint = static_cast<HTMCheckpoint*>(
+            xc->tcBase()->getHtmCheckpointPtr().get());
+        // TODO: Get code from machInst.immediate instead of register
+        uint64_t abortCode = xc->tcBase()->readIntReg(INTREG_RDI);
+        rtm_checkpoint->setAbortReason(abortCode);
+
+        Fault fault;
+        if (abortCode == 0xff) {
+           // Convention: code 0xff indicates fallback lock acquired
+           fault = std::make_shared<GenericHtmFailureFault>(
+              xc->getHtmTransactionUid(),
+              HtmFailureFaultCause::EXPLICIT_FALLBACKLOCK);
+        } else {
+           fault = std::make_shared<GenericHtmFailureFault>(
+              xc->getHtmTransactionUid(),
+              HtmFailureFaultCause::EXPLICIT);
+        }
+        return fault;
+    }
+}};
+
+output header {{
+    class XabortInst : public X86ISA::X86StaticInst
+    {
+      public:
+        static const RegIndex foldOBit = 0;
+        /// Constructor
+        XabortInst(const char *_mnemonic, ExtMachInst _machInst,
+                OpClass __opClass) :
+            X86ISA::X86StaticInst(_mnemonic, _machInst, __opClass)
+        {
+            flags[IsLoad] = true;
+            //flags[IsMemRef] = true;
+            flags[IsMicroop] = true;
+            flags[IsNonSpeculative] = true;
+            flags[IsHtmCancel] = true;
+        }
+
+        std::string generateDisassembly(Addr pc,
+                const loader::SymbolTable *symtab) const override;
+    };
+}};
+
+output decoder {{
+    std::string
+    XabortInst::generateDisassembly(
+            Addr PC, const loader::SymbolTable *symtab) const
+    {
+        std::stringstream response;
+
+        printMnemonic(response, mnemonic);
+        return response.str();
+    }
+}};
+
+def format XabortInst(*opt_flags) {{
+    iop = InstObjParams(name, Name, 'XabortInst', "", opt_flags)
+    header_output = XabortDeclare.subst(iop)
+    decoder_output = BasicConstructor.subst(iop)
+    decode_block = BasicDecode.subst(iop)
+    exec_output = BasicExecute.subst(iop)
+    exec_output += XabortInitiateAcc.subst(iop)
+    exec_output += XabortCompleteAcc.subst(iop)
+}};
+
+// XTEST instruction
+
+output header {{
+    class XtestInst : public X86ISA::X86StaticInst
+    {
+      public:
+        static const RegIndex foldOBit = 0;
+        /// Constructor
+        XtestInst(const char *_mnemonic, ExtMachInst _machInst,
+                OpClass __opClass) :
+            X86ISA::X86StaticInst(_mnemonic, _machInst, __opClass)
+        { }
+
+        std::string generateDisassembly(Addr pc,
+                const Loader::SymbolTable *symtab) const;
+    };
+}};
+
+def template XtestExecute {{
+    Fault %(class_name)s::execute(ExecContext * xc,
+            Trace::InstRecord * traceData) const
+    {
+        assert(false); // xtest untested!!
+        Fault fault = NoFault;
+        ThreadContext *tc = xc->tcBase();
+        const uint64_t htm_depth = xc->getHtmTransactionalDepth();
+        // sanity check
+        if (htm_depth > X86ISA::HTMCheckpoint::MAX_HTM_DEPTH) {
+            fault = std::make_shared<GenericISA::M5PanicFault>(
+                        "xtest found invalid htm_depth!\\n");
+        }
+
+        uint64_t reg = tc->readMiscRegNoEffect(MISCREG_RFLAGS);
+        X86ISA::RFLAGS rflags = reg;
+        if (htm_depth == 0) {
+            assert(!xc->inHtmTransactionalState());
+            rflags.zf = 1;
+        }
+        else {
+            assert(xc->inHtmTransactionalState());
+            rflags.zf = 0;
+        }
+        xc->setMiscReg(MISCREG_RFLAGS, rflags);
+
+        return fault;
+    }
+}};
+
+output decoder {{
+    std::string XtestInst::generateDisassembly(Addr PC,
+            const Loader::SymbolTable *symtab) const
+    {
+        std::stringstream response;
+
+        printMnemonic(response, mnemonic);
+        return response.str();
+    }
+}};
+
+def format XtestInst(*opt_flags) {{
+    iop = InstObjParams(name, Name, 'XtestInst', "", opt_flags)
+    header_output = BasicDeclare.subst(iop)
+    decoder_output = BasicConstructor.subst(iop)
+    decode_block = BasicDecode.subst(iop)
+    exec_output = XtestExecute.subst(iop)
+}};
+

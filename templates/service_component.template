@@ -1,0 +1,31 @@
+  HOSTNAME:
+    image: micro2024_521_node:0.1
+    command: ["slurmd"]
+    hostname: HOSTNAME
+    privileged: true
+    build:
+      context: ./slurm-docker-cluster
+      dockerfile: ./Dockerfile
+    container_name: HOSTNAME
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - var_log_slurm:/var/log/slurm
+      - gem5_path:/gem5
+      - ./gem5/dockerfiles/modules:/lib/modules:ro
+      - ./results:/gem5/results
+    devices:
+      - "/dev/kvm:/dev/kvm"
+    expose:
+      - "6818"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 3.5g
+    blkio_config:
+      device_write_bps:
+      - path: /dev/DEVICENAME
+        rate: 'MAXWRITEBANDWIDTHb'
+    depends_on:
+      - "slurmctld"

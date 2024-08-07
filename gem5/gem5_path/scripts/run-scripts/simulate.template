@@ -1,0 +1,466 @@
+#!/bin/bash
+SCRIPT_DIR="$(realpath "$(dirname "$0")")"
+SCRIPT_COMMAND="$(basename "$0")"
+
+set -o nounset
+set -o pipefail
+set -o errexit
+trap 'echo "$SCRIPT_COMMAND: error $? at line $LINENO"' ERR
+
+{{{variables}}}
+
+check_glibc() {
+    if ldd "${gem5_exec_path}" | grep "not found" | grep -q "GLIBCXX" ; then
+        # Cannot find required GBLIC version
+        echo "Cannot find GLIBCXX version required by current build of gem5 binary (${gem5_exec_path})"
+        echo "Exiting simulation script due missing GLIBC version"
+        exit 1
+    fi
+}
+
+check_kvm() {
+    if [[ "${arch}" != "x86_64" ]] ; then
+        echo "No KVM support for ${arch}!"
+        echo "Disable KVM support or use x86_64 as target arch."
+        exit 1
+    fi
+    if ! "${GEM5_ROOT}/gem5_path/scripts/kvm-ok" >/dev/null ; then
+        echo "KVM support not available in this host ($(hostname))"
+        exit 1
+    fi
+    if [ $(cat /proc/sys/kernel/perf_event_paranoid) -gt 1 ] ; then
+        echo "
+             ERROR: Use of kvmcpu requires access to perf events, but you may not have permission to collect stats.
+             Consider tweaking /proc/sys/kernel/perf_event_paranoid:
+              -1 - Not paranoid at all
+               0 - Disallow raw tracepoint access for unpriv
+               1 - Disallow cpu events for unpriv
+               2 - Disallow kernel profiling for unpriv
+             Running the following command should do it:
+             sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
+             " | cut -b13-
+        exit 1
+    fi
+}
+
+is_valid_checkpoint_boot_dir() {
+    local DIR="$1"
+    [ -d "$DIR" ] && {
+        local n=$(find -L "$DIR"  -type f -name m5.cpt -size +1k | wc -l)
+        [ $n -eq 1 ] # 1 cpt file
+    }
+}
+
+is_valid_checkpoint_init_dir() {
+    local DIR="$1"
+    [ -d "$DIR" ] && {
+        local n=$(find -L "$DIR"  -type f -name m5.cpt -size +1k | wc -l)
+        [ $n -eq 2 ] # 2 cpt files: "boot" and "init"
+    }
+}
+
+display_terminal_files() {
+    local DIR="$1"
+    local IFS=$'\n'
+    local TERMINAL_FILES=( $(find -L "${DIR}" -name "${terminal_filename}" -printf "%T@ %p\n" | sort -n | cut -d " " -f2- ) )
+    if [[ ${#TERMINAL_FILES[@]} -gt 0 ]] ; then
+        echo "#### Simulated terminal Begin ####"
+        echo ${TERMINAL_FILES[@]}
+        echo "##################################"
+        cat ${TERMINAL_FILES[@]}
+        echo
+        echo "#### Simulated terminal End   ####"
+    else
+        echo "#### No terminal files ####"
+    fi
+}
+
+ensure_init_checkpoint() {
+    if is_valid_checkpoint_init_dir "${CHECKPOINT_DIR}" ; then
+        echo "### Found 'init' checkpoint! ###"
+        find "$CHECKPOINT_DIR"  -type f -name m5.cpt
+        echo "### Reusing existing 'init' checkpoint (assuming your benchmark executable and launch script have NOT changed) ###"
+    else
+        if [[ -d "${CHECKPOINT_DIR}" || -L "${CHECKPOINT_DIR}" ]] ; then
+            # Remove checkpoint folder since it is invalid
+            rm -rf "$CHECKPOINT_DIR"
+            echo "$CHECKPOINT_DIR directory does not contain a valid checkpoint, overwriting"
+        fi
+        if reuse_init_checkpoint ; then 
+            echo "### Reusing global init and boot checkpoints found in ${CHECKPOINT_INIT_REUSED_DIR}  ###"
+        else
+            create_init_checkpoint
+        fi
+    fi
+}
+
+reuse_init_checkpoint() {
+    [[ "${checkpoint_init_reuse}" = "True" ]] && {
+        # TODO: Maybe add more files to the hash (gem5 binary, benchmarks_disk_image, os_disk_image, kernel…)
+        local CHECKPOINT_HASH="$(cat "${output_directory}/${launchscript_filename}" | sha1sum | cut -d" " -f1)"
+        CHECKPOINT_INIT_REUSED_DIR="${checkpoint_init_reuse_root_dir}/${CHECKPOINT_HASH}"
+        if [[ -d "${checkpoint_init_reuse_root_dir}" ]] ; then
+            [[ ! -d "$CHECKPOINT_DIR" && -d "${CHECKPOINT_INIT_REUSED_DIR}" ]] && {
+                ln -s "${CHECKPOINT_INIT_REUSED_DIR}" "${CHECKPOINT_DIR}"
+            }
+        else
+            echo "#### Warning: checkpoint_init_reuse (init checkpoint reuse) is enabled but checkpoint_init_reuse_root_dir does not exist (${checkpoint_init_reuse_root_dir}) ####"
+            return 1
+        fi
+    }
+}
+
+save_checkpoint_for_reuse() {
+    if [[ "${checkpoint_init_reuse}" = "True" ]] ; then
+        if [[ -d "${checkpoint_init_reuse_root_dir}" ]] ; then
+            if mv -n -T "${CHECKPOINT_DIR}" "${CHECKPOINT_INIT_REUSED_DIR}" ; then 
+                ln -s "${CHECKPOINT_INIT_REUSED_DIR}" "${CHECKPOINT_DIR}"
+                echo "#### Init checkpoint moved to $CHECKPOINT_INIT_REUSED_DIR   ####"
+            else
+                echo "#### Could not move checkpoint to $CHECKPOINT_INIT_REUSED_DIR (probably it already exists due to a race condition)  ####"
+            fi
+        else
+            echo "#### Warning: Cold not save checkpoint for reuse because checkpoint_init_reuse_root_dir does not exist (${checkpoint_init_reuse_root_dir}) ####"
+        fi
+    fi
+}
+
+create_init_checkpoint() {
+    mkdir -p "${CHECKPOINT_DIR}"
+    cd "${CHECKPOINT_DIR}"
+    ln -sf "${CHECKPOINT_BOOT_PATH}" . 
+
+    local -a GEM5_ARGS
+    GEM5_ARGS=("--stats-file=/dev/null"
+               "--outdir=${CHECKPOINT_DIR}"
+               "--redirect-stdout"
+               "--redirect-stderr"
+               "${GEM5_ROOT}/configs/example/fs.py")
+
+    local CPU_TYPE
+    if [[ "${enable_kvm}" = "True" ]] ; then
+        check_kvm
+        CPU_TYPE="X86KvmCPU"
+        # Hack required for correct checkpointing when using KVM
+        GEM5_ARGS+=("--checkpoint-m5sum-kvm-hack")
+    else
+        CPU_TYPE="AtomicSimpleCPU"
+    fi
+    GEM5_ARGS+=("--restore-with-cpu=${CPU_TYPE}"
+                "--cpu-type=${CPU_TYPE}")
+
+    GEM5_ARGS+=( ${arch_specific_opts}
+                 "${GEM5_OPTIONS_GENERAL[@]}"
+                 "${GEM5_OPTIONS_FULL_SYSTEM[@]}"
+                 "--checkpoint-dir=${CHECKPOINT_DIR}"
+                 "-r" "1"
+                 "--disk-image=${benchmarks_disk_image}")
+    
+    GEM5_ARGS+=("--script=${output_directory}/${launchscript_filename}")
+    # Take checkpoint at first m5_work_begin
+    GEM5_ARGS+=("--work-begin-checkpoint-count=1")
+    # Stop simulation after first checkpoint
+    GEM5_ARGS+=("--max-checkpoints=1")
+
+    echo "#### Creating init checkpoint using ${CPU_TYPE}..."
+
+    run_and_log "${gem5_exec_path}" "${GEM5_ARGS[@]}"
+    
+    if grep -q "because checkpoint" "${CHECKPOINT_DIR}/simout" ; then
+        echo "#### Init checkpoint created   ####"
+        save_checkpoint_for_reuse
+        display_terminal_files "${CHECKPOINT_DIR}"
+    else
+        echo "#### Failed to create init checkpoint   ####"
+        display_terminal_files "${CHECKPOINT_DIR}"
+        exit 1
+    fi
+}
+
+run_detailed_simulation() {
+    mkdir -p "${output_directory}"
+    cd "${output_directory}"
+    rm -f sim{err,out} "${terminal_filename}"
+
+    local -a GEM5_ARGS
+    GEM5_ARGS=("--redirect-stdout"
+               "--redirect-stderr"
+               # Extra info about simulation configuration, used as key (unique
+               # identifier) of this simulation, is read from file config.info
+               # and appended to config.ini
+               "--sim-info=${output_directory}/${siminfo_filename}")
+
+    if [ -n "$DEBUG_FLAGS" ] ; then
+        local DEBUG_FILE="debug_output_$(date +%Y-%m-%d-%H-%M-%S).trace"
+        GEM5_ARGS+=( "--debug-flags=${DEBUG_FLAGS}"
+                     "--debug-file=${DEBUG_FILE}" )
+    elif [ "${LOCKSTEP_MODE}" = yes ] ; then
+        # Exec flag is required by lockstep mode
+        GEM5_ARGS+=( "--debug-flags=Exec"
+                     # Avoid generating trace file if only Exec
+                     "--debug-file=/dev/null" )
+    fi
+
+    if [ -n "$DEBUG_START_TICK" ] ; then
+        GEM5_ARGS+=( "--debug-start=${DEBUG_START_TICK}")
+    fi
+
+    if [ -n "$DEBUG_END_TICK" ] ; then
+        GEM5_ARGS+=( "--debug-end=${DEBUG_END_TICK}")
+    fi
+    
+    if [[ "${simulation_mode}" == "full-system" ]] ; then
+        GEM5_ARGS+=("${GEM5_ROOT}/configs/example/fs.py")
+    elif [[ "${simulation_mode}" == "syscall-emulation" ]] ; then
+        GEM5_ARGS+=("${GEM5_ROOT}/configs/example/se.py")
+    else
+        echo "Incorrect simulation_mode (${simulation_mode})"
+        exit 1
+    fi
+   
+    GEM5_ARGS+=("--ruby") # We don't support not using ruby
+    
+    # Exit after first work end (debugging only)
+    if [[ "${exit_at_roi_end}" = "True" ]] ; then
+        if [[ "${simulation_mode}" == "full-system" ]] ; then
+            GEM5_ARGS+=("--work-end-exit-count=1")
+        else
+            GEM5_ARGS+=("--work-end-exit-count=2")
+        fi
+    fi
+
+    # TODO
+    #GEM5_ARGS+=("--proc-maps-file=${output_directory}/${proc_maps_file}")
+    
+    GEM5_ARGS+=( ${arch_specific_opts}
+                 "${GEM5_OPTIONS_GENERAL[@]}" )
+
+    if [[ "${simulation_mode}" == "full-system" ]] ; then
+        GEM5_ARGS+=( "${GEM5_OPTIONS_FULL_SYSTEM[@]}"
+                     "--checkpoint-dir=${CHECKPOINT_DIR}"
+                     "-r" "2"
+                     "--disk-image=${benchmarks_disk_image}" )
+        echo "#### Simulating from init checkpoint"
+    else
+        echo "#### Simulating from start of program"
+        ENVIRONMENT_FILE="${output_directory}/environment"
+        echo "${benchmark_environment:-}" > "${ENVIRONMENT_FILE}"
+        GEM5_ARGS+=( "${GEM5_OPTIONS_SYSCALL_EMULATION[@]}"
+                     "--env=${ENVIRONMENT_FILE}")
+    fi
+                 
+    GEM5_ARGS+=( "${GEM5_OPTIONS_DETAILED[@]}"
+                 ${extra_detailed_args} )
+
+    local FALLBACK_LOCK_FILE="${output_directory}/${htm_fallback_lock_filename:-no_fallback_lock_filename_provided}"
+    if [[ -f "${FALLBACK_LOCK_FILE}" && "$(wc -l < "${FALLBACK_LOCK_FILE}")" -eq 1 ]] ; then
+        GEM5_ARGS+=("--htm-fallbacklock-addr=$(cat "${FALLBACK_LOCK_FILE}")")
+    elif [ "${LOCKSTEP_MODE}" = yes ] ; then
+        echo "Lockstep mode requires a valid fallback lock address in file ${FALLBACK_LOCK_FILE}"
+        exit 1
+    fi
+
+    if [[ "$FORCE_HTM_VISUALIZER" = yes ]] ; then
+        GEM5_ARGS+=("--htm-visualizer")
+    fi
+    
+    if [ "${LOCKSTEP_MODE}" = yes ] ; then
+        if [[ "${simulation_mode}" != "full-system" ]] ; then
+            echo "LOCKSTEP_MODE not supported for simulation_mode=$simulation_mode"
+        fi
+        local RECORD_GEM5_EXEC_PATH="${GEM5_ROOT}/build/${m5_arch}_${LOCKSTEP_RECORD_PROTOCOL}/gem5.${build_type}"
+        local REPLAY_GEM5_EXEC_PATH="${GEM5_ROOT}/build/${m5_arch}_${LOCKSTEP_REPLAY_PROTOCOL}/gem5.${build_type}"
+        local RECORD_OUT_DIR="${output_directory}/record"
+        local REPLAY_OUT_DIR="${output_directory}/replay"
+        
+        mkdir -p "${REPLAY_OUT_DIR}"
+        mkdir -p "${RECORD_OUT_DIR}"
+
+        rm -rf /tmp/gem5fifo* 2>/dev/null # TODO: FIXME
+        local LOCKSTEP_FIFOPATH=$(mktemp -d /tmp/gem5-lockstep_mode.XXXXXXX)
+        
+        local RECORD_GEM5_ARGS=( "--outdir=${RECORD_OUT_DIR}"
+                                 "${GEM5_ARGS[@]}"
+                                 "--restore-with-cpu=${LOCKSTEP_RECORD_CPU_TYPE}"
+                                 "--cpu-type=${LOCKSTEP_RECORD_CPU_TYPE}"
+                                 "--lockstep-fifopath=${LOCKSTEP_FIFOPATH}"
+                                 "${LOCKSTEP_RECORD_HTM_OPTIONS[@]}"
+                                 "--htm-visualizer-filename=${RECORD_OUT_DIR}/htm_visualizer"
+                                 "${LOCKSTEP_RECORD_CACHE_OPTIONS[@]}"
+                                 "--lockstep-mode=record" )
+        
+        local -a XTERM_COMMANDS
+        if [ "$LOCKSTEP_USE_XTERM" = yes ] ; then
+	    XTERM_COMMANDS=( xterm -geometry  180x24+0+0  -fa 'Monospace' -fs 12  -title "gem5" -e )
+        else
+            XTERM_COMMANDS=()
+        fi
+        run_and_log "${XTERM_COMMANDS[@]}" "${DEBUG_COMMANDS[@]}" "${RECORD_GEM5_EXEC_PATH}" "${RECORD_GEM5_ARGS[@]}" &
+        
+        local REPLAY_GEM5_ARGS=( "--outdir=${REPLAY_OUT_DIR}"
+                                 "${GEM5_ARGS[@]}"
+                                 "--restore-with-cpu=${LOCKSTEP_REPLAY_CPU_TYPE}"
+                                 "--cpu-type=${LOCKSTEP_REPLAY_CPU_TYPE}"
+                                 "--lockstep-fifopath=${LOCKSTEP_FIFOPATH}"
+                                 "${LOCKSTEP_REPLAY_HTM_OPTIONS[@]}"
+                                 "--htm-visualizer-filename=${REPLAY_OUT_DIR}/htm_visualizer"
+                                 "${LOCKSTEP_REPLAY_CACHE_OPTIONS[@]}"
+                                 "--lockstep-mode=replay" )
+
+        run_and_log "${DEBUG_COMMANDS[@]}" "${REPLAY_GEM5_EXEC_PATH}" "${REPLAY_GEM5_ARGS[@]}"
+
+        display_terminal_files "${REPLAY_OUT_DIR}"        
+    else
+        GEM5_ARGS=("--outdir=${output_directory}"
+                   "${GEM5_ARGS[@]}"
+                   "--restore-with-cpu=${cpu_model}"
+                   "--cpu-type=${cpu_model}")
+
+        (
+            if [[ "${simulation_mode}" == "syscall-emulation" ]] ; then
+                cd "${benchmark_se_work_directory}"
+                printf 'pwd = %q\n' "$(pwd)"
+            fi
+            run_and_log "${DEBUG_COMMANDS[@]}" "${gem5_exec_path}" "${GEM5_ARGS[@]}"
+        )
+        
+        # NOTE: Keep the following strings (starting with ####) in sync with check_simulations-r.sh
+        if grep -q "because m5_exit instruction encountered" "${output_directory}/simout" ; then
+            echo "#### Simulation completed (m5 exit)  ####"
+            display_terminal_files "${output_directory}"
+        elif grep -q "because work items exit count reached" "${output_directory}/simout" ; then
+            echo "#### Simulation completed (end of ROI)   ####"
+            display_terminal_files "${output_directory}"
+        else
+            echo "#### Simulation failed   ####"
+            display_terminal_files "${output_directory}"
+            exit 1
+        fi
+    fi
+}
+
+run_and_log() {
+    printf "Running: "
+    printf "%q " "$@"
+    printf "\n"
+    "$@"
+}
+
+### General options
+DEBUG_COMMANDS=()
+FORCE_HTM_VISUALIZER=no
+REMOVE_CKPT_AFTER_SIM=no
+DEBUG_FLAGS="${debug_flags:-}"
+DEBUG_START_TICK="${debug_start_tick:-}"
+DEBUG_END_TICK="${debug_end_tick:-}"
+
+### Lockstep mode options (TODO all except LOCKSTEP_MODE)
+LOCKSTEP_MODE=no
+LOCKSTEP_USE_XTERM=yes
+# Set common/varying HTM config options here
+LOCKSTEP_RECORD_HTM_OPTIONS=()
+LOCKSTEP_REPLAY_HTM_OPTIONS=()
+LOCKSTEP_RECORD_CACHE_OPTIONS=()
+LOCKSTEP_REPLAY_CACHE_OPTIONS=()
+# Set here your record/replay protocol and CPU type By
+# default, compare timing vs o3 CPU using same protocol, but
+# it should be possible to use the lockstep facility to debug
+# different protocols
+LOCKSTEP_RECORD_CPU_TYPE="DerivO3CPU"
+LOCKSTEP_REPLAY_CPU_TYPE="${cpu_model}"
+LOCKSTEP_RECORD_PROTOCOL="${protocol}"
+LOCKSTEP_REPLAY_PROTOCOL="${protocol}"
+
+
+help() {
+    echo "Options:"
+    echo "  --use-gdb: Run simulation with GDB."
+    echo "  --use-valgrind: Run simulation with Valgrind."
+    echo "  --htm-visualizer: Enable the HTM visualizer."
+    echo "  --rm-ckpt-after-sim: Remove checkpoint directory after finishing the simulation."
+    echo "  --lockstep: Enable lockstep simulation (TODO: add options to configure lockstep)"
+    echo "  --debug-flags: Override debug_flags"
+    echo "  --debug-start-tick: Override debug_start_tick"
+    echo "  --debug-end-tick: Override debug_end_tick"
+}
+
+parse_options() {
+    local optspec="help,use-gdb,use-valgrind,lockstep,htm-visualizer,rm-ckpt-after-sim,debug-flags:,debug-start-tick:,debug-end-tick:"
+    local errors="$(getopt -n error-detected -Q --options "" --long ${optspec} -- "$@" 2>&1 || true)"
+    if [[ "$errors" =~ error-detected:.+ ]] ; then
+        echo "$errors" | cut -d: -f2- | xargs -n1 -d'\n' -i% -- echo "Error:%."
+        help
+        exit 1
+    fi
+    eval set -- "$(getopt -n simulate --options "" --long ${optspec} -- "$@")"
+    while [[ $# -gt 0 ]] ; do
+        if [[ "--help" == "$1" ]] ; then
+            help
+            exit 0
+        elif [[ "--use-valgrind" == "$1" ]] ; then
+            DEBUG_COMMANDS=("valgrind" "--")
+        elif [[ "--use-gdb" == "$1" ]] ; then
+            DEBUG_COMMANDS=("gdb" "--args")
+        elif [[ "--lockstep" == "$1" ]] ; then
+            LOCKSTEP_MODE=yes
+        elif [[ "--htm-visualizer" == "$1" ]] ; then
+            FORCE_HTM_VISUALIZER=yes
+        elif [[ "--rm-ckpt-after-sim" == "$1" ]] ; then
+            REMOVE_CKPT_AFTER_SIM=yes
+        elif [[ "--debug-flags" == "$1" ]] ; then
+            shift
+            DEBUG_FLAGS="$1"
+        elif [[ "--debug-start-tick" == "$1" ]] ; then
+            shift
+            DEBUG_START_TICK="$1"
+        elif [[ "--debug-end-tick" == "$1" ]] ; then
+            shift
+            DEBUG_END_TICK="$1"
+        elif [[ "--" == "$1" ]] ; then
+            true # ignore
+        else 
+            echo "Unknown option '$1'"
+            help
+            exit 1
+        fi
+        shift
+    done
+}
+
+parse_options "$@"
+
+echo "arch=${arch}" 
+echo "protocol=${protocol}"
+echo "cpu_model=${cpu_model}"
+echo "hostname=$(hostname)"
+[ -z "${SLURM_JOBID:-}" ] || echo "slurm_jobid=${SLURM_JOBID}"
+
+check_glibc
+
+if [[ "${simulation_mode}" == "full-system" ]] ; then
+    if ! is_valid_checkpoint_boot_dir "${checkpoint_boot_dir}" -name "cpt.*" ; then
+        echo "Cannot locate boot checkpoint in «${checkpoint_boot_dir}»"
+        exit 1
+    fi
+    CHECKPOINT_BOOT_PATH=$(realpath "${checkpoint_boot_dir}"/cpt.*)
+
+    CHECKPOINT_DIR="${output_directory}/${checkpoint_init_subdir}"
+
+    echo "**** Running simulation_mode in full system mode ****"
+    echo "os_disk_image=${os_disk_image}"
+    echo "benchmarks_disk_image=${benchmarks_disk_image}"
+    echo "kernel_binary=${kernel_binary}"
+
+    ensure_init_checkpoint
+elif [[ "${simulation_mode}" == "syscall-emulation" ]] ; then
+    echo "**** Running simulation in syscall emulation mode ****"
+else
+    echo "Incorrect simulation_mode (${simulation_mode})"
+    exit 1
+fi
+
+run_detailed_simulation
+
+if [[ "$REMOVE_CKPT_AFTER_SIM" = yes || "${rm_ckpt_after_sim}" = "True" ]] ; then
+    rm -rf "${CHECKPOINT_DIR}"
+fi

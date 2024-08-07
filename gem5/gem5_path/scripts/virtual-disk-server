@@ -1,0 +1,10 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(dirname "$(readlink -fm "$0")")"
+
+if [[ $# -eq 0 ]] ; then
+    exec "${SCRIPT_DIR}/virtual-build-server" # show help
+    exit 0
+else
+    exec "${SCRIPT_DIR}/virtual-build-server" --type=file-server "$@"
+fi

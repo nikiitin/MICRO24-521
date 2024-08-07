@@ -1,0 +1,20 @@
+# -*- mode:python -*-
+
+Import('*')
+
+if env['PROTOCOL'] == 'None':
+    Return()
+
+SimObject('RubyTransactionInterfaceManager.py')
+SimObject('RubyHTM.py')
+
+Source('htm.cc')
+Source('LazyTransactionCommitArbiter.cc')
+Source('LazyTransactionVersionManager.cc')
+Source('EagerTransactionVersionManager.cc')
+Source('TransactionInterfaceManager.cc')
+Source('TransactionConflictManager.cc')
+Source('TransactionIsolationManager.cc')
+Source('XactIsolationChecker.cc')
+Source('XactValueChecker.cc')
+

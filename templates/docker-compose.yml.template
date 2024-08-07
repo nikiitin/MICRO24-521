@@ -1,0 +1,63 @@
+services:
+  mysql:
+    image: mariadb:10.10
+    hostname: mysql
+    container_name: mysql
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+      MYSQL_DATABASE: slurm_acct_db
+      MYSQL_USER: slurm
+      MYSQL_PASSWORD: password
+    volumes:
+      - var_lib_mysql:/var/lib/mysql
+
+  slurmdbd:
+    image: micro2024_521_node:0.1
+    build:
+      context: ./slurm-docker-cluster
+      dockerfile: ./Dockerfile
+      args:
+        SLURM_TAG: ${SLURM_TAG:-slurm-21-08-6-1}
+    command: ["slurmdbd"]
+    container_name: slurmdbd
+    hostname: slurmdbd
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6819"
+    depends_on:
+      - mysql
+
+  slurmctld:
+    image: micro2024_521_controller:0.1
+    command: ["slurmctld"]
+    container_name: slurmctld
+    hostname: slurmctld
+    privileged: true
+    build:
+      context: ./gem5
+      dockerfile: ./Dockerfile
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - var_log_slurm:/var/log/slurm
+      - gem5_path:/gem5
+      - ./gem5/dockerfiles/modules:/lib/modules:ro
+      - ./results:/gem5/results
+    devices:
+      - "/dev/kvm:/dev/kvm"
+    expose:
+      - "6817"
+    depends_on:
+      - "slurmdbd"
+
+  SLURM_COMPUTE_NODES
+
+volumes:
+  etc_munge:
+  etc_slurm:
+  var_lib_mysql:
+  var_log_slurm:
+  gem5_path:

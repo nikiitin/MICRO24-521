@@ -1,0 +1,23 @@
+#ifndef ABORT_STATUS_H
+#define ABORT_STATUS_H
+
+// TME Abort codes
+#ifndef _TMFAILURE_REASON
+
+#define _TMFAILURE_REASON     0x00007fffu
+#define _TMFAILURE_RTRY       0x00008000u
+#define _TMFAILURE_CNCL       0x00010000u
+#define _TMFAILURE_MEM        0x00020000u
+#define _TMFAILURE_IMP        0x00040000u
+#define _TMFAILURE_ERR        0x00080000u
+#define _TMFAILURE_SIZE       0x00100000u
+#define _TMFAILURE_NEST       0x00200000u
+#define _TMFAILURE_DBG        0x00400000u
+#define _TMFAILURE_INT        0x00800000u
+#define _TMFAILURE_TRIVIAL    0x01000000u
+#define _TMFAILURE_DISABLED   0x02000000u
+#define _TMFAILURE_UNDO_LOG   0x04000000u
+#endif
+
+#endif
+

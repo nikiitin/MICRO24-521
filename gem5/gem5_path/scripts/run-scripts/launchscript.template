@@ -1,0 +1,44 @@
+#!/bin/bash
+### @launchscript@ ###
+
+SCRIPT_COMMAND="$(basename "$0")"
+
+set -o nounset
+set -o pipefail
+trap 'echo "$SCRIPT_COMMAND: error $? at line $LINENO"' ERR
+
+{{{variables}}}
+
+IFS=$'\n'
+for l in $benchmark_environment ; do
+    eval "export $l"
+done
+IFS=$' \n\t'
+
+export M5_SIMULATOR=1
+if [ "${benchmarks_mount_image}" = "True" ] ; then
+    mkdir -p "${benchmarks_image_mountpoint}"
+    mount "${benchmarks_image_device}" "${benchmarks_image_mountpoint}"
+    cd "${benchmarks_image_mountpoint}"
+fi
+sync
+
+if [ "${disable_transparent_hugepages:-False}" == "True" ] ; then
+    echo never > /sys/kernel/mm/transparent_hugepage/enabled
+fi
+
+# Generate variability via sleep (0.1 × random_seed)
+T=$(printf "%05d" ${random_seed})
+sleep "${T:0:4}.${T:4:1}"
+
+cd "${benchmark_subdir}"
+
+echo cwd: "$(pwd)"
+
+echo Running: "./${benchmark_binary}" ${benchmark_options} \< "${benchmark_input_filename:-/dev/null}"
+"./${benchmark_binary}" ${benchmark_options} < "${benchmark_input_filename:-/dev/null}"
+echo 'Launch script done ($?='"$?"'). Exiting simulation... (m5 exit)'
+
+sync # TODO: why?
+sleep 2 # TODO: why?
+/sbin/m5 exit
