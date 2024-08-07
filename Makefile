@@ -21,10 +21,11 @@ endif
 # Get the maximum bandwidth for disk for each container
 MAX_IO_PER_CONTAINER = $(shell echo $$(($(MAX_IO) / $(M_NUM_SERVICES))))
 # Check if results directory exists
-# else create it
-EXIST_RESULTS = $(shell if [ ! -d "./results" ]; then \
-	mkdir results; \
-	fi)
+# If not, create it
+ifneq ($(wildcard ./results),)
+else
+    RESULTDIR = $(shell mkdir ./results)
+endif
 
 # Get the device the results directory is in
 M_CURRENT_DEVICE = $(shell lsblk -no pkname $(shell df ./results | awk '{print $$1}' | tail -n1))
