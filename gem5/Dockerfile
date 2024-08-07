@@ -118,7 +118,6 @@ RUN set -x \
 WORKDIR /gem5
 COPY . /gem5
 RUN ./tasks-gem5 build
-RUN ./tasks-gem5 create-boot-checkpoints
 
 COPY dockerfiles/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
