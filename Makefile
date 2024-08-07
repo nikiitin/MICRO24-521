@@ -227,3 +227,5 @@ clean:
 	@sudo docker compose down
 	@sudo docker image prune --filter="label=image_label=micro2024_521" --force
 	@echo "To totally clean the environment, I'd suggest to remove everything from /var/lib/docker directory."
+	@echo "Cleaning cached data..."
+	rm -rf gem5/dependencies
