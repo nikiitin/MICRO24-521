@@ -9,11 +9,11 @@ build_dependencies: download_dependencies install
 	@echo "All dependencies from gem5 built!"
 
 download_dependencies:
-	if [ ! -d "$(GEM5_DEPENDENCIES_PATH)" ]; then \
+	@if [ ! -d "$(GEM5_DEPENDENCIES_PATH)" ]; then \
 		mkdir $(GEM5_DEPENDENCIES_PATH); \
 	fi
 	@echo "Downloading dependencies for gem5..."
-	@wget --no-check-certificate $(GEM5_DEPENDENCIES_URL) -O $(GEM5_DEPENDENCIES_PATH)/dependencies.tar.gz
+	@wget --no-check-certificate "$(GEM5_DEPENDENCIES_URL)" -O "$(GEM5_DEPENDENCIES_PATH)/dependencies.tar.gz"
 	@echo "Dependencies downloaded!"
 
 
