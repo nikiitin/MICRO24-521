@@ -62,3 +62,5 @@ then
 fi
 
 exec "$@"
+
+/gem5/tasks-gem5 create-boot-checkpoints --overwrite
