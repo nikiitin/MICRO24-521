@@ -183,7 +183,7 @@ configure_containers:
 
 configure_dependencies_gem5:
 	@cd gem5 && make build_dependencies
-	@echo "gem5 container configured!"
+	@echo "gem5 dependencies installed!"
 ### END CONTAINER CONFIGURATION ###
 
 
