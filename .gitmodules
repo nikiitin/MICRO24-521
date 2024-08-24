@@ -1,0 +1,3 @@
+[submodule "RING-5"]
+	path = RING-5
+	url = https://github.com/nikiitin/RING-5/tree/MICRO24-521
