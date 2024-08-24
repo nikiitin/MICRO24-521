@@ -193,7 +193,7 @@ add_submodules:
 checkout_RING-5_branch:
 	@cd RING-5 && git checkout MICRO24
 
-build_RING-5: add_submodules
+build_RING-5: add_submodules checkout_RING-5_branch
 	@cd RING-5 && make build
 
 build: check_kvm_environment check_docker_environment configure_containers configure_dependencies_gem5 build_RING-5
