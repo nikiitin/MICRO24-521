@@ -223,7 +223,7 @@ run:
 
 stop:
 	@echo "Stopping the containers..."
-	@sudo docker compose down
+	@sudo docker compose down --volumes
 	@echo "Containers stopped!"
 
 connect:
