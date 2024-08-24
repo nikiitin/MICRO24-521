@@ -44,3 +44,8 @@ gem5/dockerfiles/slurm*
 
 slurm-docker-cluster/slurm*
 docker-compose.yml
+
+*.png
+*.pdf
+*.csv
+*.tar.gz

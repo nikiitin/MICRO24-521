@@ -187,8 +187,10 @@ configure_dependencies_gem5:
 	@echo "gem5 dependencies installed!"
 ### END CONTAINER CONFIGURATION ###
 
+build_RING-5:
+	@cd RING-5 && make build
 
-build: check_kvm_environment check_docker_environment configure_containers configure_dependencies_gem5
+build: check_kvm_environment check_docker_environment configure_containers configure_dependencies_gem5 build_RING-5
 	@echo "Building all the containers from the compose file..."
 	@echo "This may take a while and a lot of disk space..."
 	@echo "Additionally, it requires sudo permissions."
@@ -229,3 +231,6 @@ clean:
 	@echo "To totally clean the environment, I'd suggest to remove everything from /var/lib/docker directory."
 	@echo "Cleaning cached data..."
 	rm -rf gem5/dependencies
+
+plot:
+	@cd RING-5 && make run
