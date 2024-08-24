@@ -7,12 +7,12 @@ In this document we explain how to install and deploy containers for MICRO submi
 - Docker compose ver. 2.29.1
 - Ubuntu (for this experiments ver. 20.04 LTS was used)
 - Virtualization support (Check in your BIOS)
+- R ver. 4.4.1
 For ease of use and reduced reproducibility complexity, we provided the user with a make file that is automated to easily install almost all these tools.
 
 ## Deploy steps
-1. Change to containers directory. Execute make build to prepare all the configurations and containers. This step can take a while since the simulator is big and it will need to build from scratch. Additionally, root permission will be required since it will have to install several dependencies, reduce perf paranoid from kernel, use docker, etc.
+1. Execute make build at the root of the repository to prepare all the configurations and containers. This step can take a while since the simulator is big and it will need to build from scratch. Additionally, root permission will be required since it will have to install several dependencies, reduce perf paranoid from kernel, use docker, etc.
 ~~~bash
-cd containers
 sudo make build
 ~~~
 2. Once the application is fully built, it will prompt with the message "Everything built correctly!". Additionally, will print some notes that the user should carefully read. It is now time to run the containers. One objective is prepared to compose and run all of them. While building, the application automatically resolved how many containers would create depending on your system specifications. Again, as docker is being run, use sudo.
@@ -57,3 +57,10 @@ systemctl stop docker
 rm -rf /var/lib/docker
 systemctl start docker
 ~~~
+## Getting the results
+To obtain the results we used [RING-5](https://github.com/nikiitin/RING-5.git) which is a R-based statistical analysis tool for gem5. Note that even if it is public it is an experimental tool and is prone to failure. We pushed a specific branch (MICRO24) that will be kept to keep reproducibility. This tool will be built and configured altogether with the previous ```make build``` command.
+Once all the simulations are finished, you can execute the following command that will execute RING-5 with the configurations for this project:
+~~~bash
+make plot
+~~~
+It will try to execute RING-5 for all the stats files found at ```results``` folder. It will create several folders, each containing the results of the experiments, both in csv and in graphic format with png files and each corresponding to the figure in the original manuscript.
