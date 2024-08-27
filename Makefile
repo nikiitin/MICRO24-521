@@ -1,6 +1,9 @@
 DOCKER_ENGINE_VERSION = 27.1.1
 DOCKER_COMPOSE_VERSION = 2.29.1
 CONTAINERD_VERSION = 1.7.19
+# Will the build use kvm?
+# By default, NO
+BUILD_TYPE_VIRT = atomic
 # Maximum memory per container in kbytes
 # Set to 3.5GiB by default
 # Should not expect to spend more than 3.5GiB to execute
@@ -36,6 +39,7 @@ export M_NUM_SERVICES
 ### KVM ENVIROMENT ###
 check_kvm_environment: kvm_check reduce_paranoid
 	@echo "KVM environment is ready!"
+	BUILD_TYPE_VIRT = kvm
 
 kvm_check: 
 # Check if KVM is installed
@@ -46,14 +50,13 @@ kvm_check:
 # If yes, install KVM
 # If no, exit
 	@if [ $$? -ne 0 ]; then \
-		echo "KVM is not installed. Do you want to install KVM? [y/n]"; \
-		read -r answer; \
-		if [ "$$answer" = "y" ]; then \
-			make kvm_install; \
-		else \
-			echo "Exiting..."; \
-			exit 1; \
-		fi; \
+		echo "KVM is not supported. Build will stop..."; \
+		echo "Since KVM is not available, try executing the following build command:"; \
+		echo "make build_atomic"; \
+		echo "This will avoid using fast-forward for gem5."; \
+		echo "Note that simulations will take longer to execute."; \
+		echo "Exiting..."; \
+		exit 1; \
 	fi
 
 reduce_paranoid:
@@ -179,7 +182,7 @@ docker_compose_install:
 ### CONTAINER CONFIGURATION ###
 
 configure_containers:
-	@cd generators && make generate
+	@cd generators && make generate_$(BUILD_TYPE_VIRT)
 	@echo "Containers configured!"
 
 configure_dependencies_gem5:
@@ -187,15 +190,19 @@ configure_dependencies_gem5:
 	@echo "gem5 dependencies installed!"
 ### END CONTAINER CONFIGURATION ###
 
+### SUBMODULES ###
 add_submodules:
 	@git submodule update --init --recursive
 
+### RING-5 ###
 checkout_RING-5_branch:
 	@cd RING-5 && git checkout MICRO24
 
 build_RING-5: add_submodules checkout_RING-5_branch
 	@cd RING-5 && make build
+### END SUBMODULES ###
 
+### Objectives for the user ###
 build: check_kvm_environment check_docker_environment configure_containers configure_dependencies_gem5 build_RING-5
 	@echo "Building all the containers from the compose file..."
 	@echo "This may take a while and a lot of disk space..."
@@ -203,7 +210,18 @@ build: check_kvm_environment check_docker_environment configure_containers confi
 	@sudo docker compose build
 	@echo "Everything built correctly!"
 	make notes
-	
+	@echo "NOTE: KVM is required to be installed in your machine as" \
+		"gem5 uses KVM to run the simulations with fast-forward." \
+		"all the containers will try to use /dev/kvm device from this host."
+
+build_atomic: check_docker_environment configure_containers configure_dependencies_gem5 build_RING-5
+	@echo "Building all the containers from the compose file..."
+	@echo "This may take a while and a lot of disk space..."
+	@echo "Additionally, it requires sudo permissions."
+	@sudo docker compose build
+	@echo "Everything built correctly!"
+	make notes
+	@echo "Note: Fast-forward will not be used for gem5 simulations."
 
 notes:
 	@echo "Take into account that you may need to run the containers with sudo."
@@ -212,9 +230,7 @@ notes:
 	@echo "To clean the containers, execute: make clean"
 	@echo "FYI: There seems to be a bug that consumes a lot of space from disk."
 	@echo "This space is taken from the /var/lib/docker directory."
-	@echo "NOTE: KVM is required to be installed in your machine as" \
-		"gem5 uses KVM to run the simulations with fast-forward." \
-		"all the containers will try to use /dev/kvm device from this host."
+
 
 run:
 	@echo "Running the containers..."

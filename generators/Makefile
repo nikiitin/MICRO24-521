@@ -1,3 +1,4 @@
+KVM_FLAG = ""
 generate_slurm:
 	@echo "Generating slurm configuration files"
 	@echo "Using $(M_NUM_CPUS) CPUs. If you want to " \
@@ -13,8 +14,13 @@ generate_compose:
 		"variable from Makefile."
 	@./generate_docker_compose.sh -n $(M_NUM_SERVICES) \
 		-d $(M_CURRENT_DEVICE) \
-		-w "$(MAX_IO_PER_CONTAINER)"
+		-w "$(MAX_IO_PER_CONTAINER)" \
+		$(KVM_FLAG)
 
 
-generate: generate_slurm generate_compose
+generate_kvm: generate_slurm generate_compose
+	KVM_FLAG = "-k"
+	@echo "All configuration files generated!"
+
+generate_atomic: generate_slurm generate_compose
 	@echo "All configuration files generated!"

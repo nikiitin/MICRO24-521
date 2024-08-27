@@ -1,4 +1,11 @@
 #!/bin/bash
+usage () {
+    echo "Usage: $0 [-k] [-q|--enqueue]"
+    echo
+    echo "Options:"
+    echo "  -k: Use KVM for the simulations."
+    echo "  -q, --enqueue: Enqueue the generated simulations to slurm."
+}
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 SCRIPT_COMMAND="$0"
@@ -13,14 +20,34 @@ CONFIG_FILE="$SCRIPT_DIR/config.chats.blocks.sensibility.py"
 GEN_SCRIPTS="$SCRIPT_DIR/../run-scripts/gem5_gen_scripts.py" 
 GEN_SCRIPTS_ARGS=("--config-file" "$CONFIG_FILE")
 
-if [[ "$#" = 1 && ( "$1" = "-q" || "$1" = "--enqueue" )]] ; then
-    GEN_SCRIPTS_ARGS=("${GEN_SCRIPTS_ARGS[@]}" "--enqueue" )
-elif [[ "$#" = 0 ]] ; then
-    : # only generate
-else
-    echo "Only argument supported is -q or --enqueue to enqueue."
-    exit 1
-fi
+while getopts "kq-:" opt; do
+    case "$opt" in
+        -)
+            case "${OPTARG}" in
+                enqueue)
+                    GEN_SCRIPTS_ARGS=("${GEN_SCRIPTS_ARGS[@]}" "--enqueue" )
+                    ;;
+                *)
+                    echo "Invalid option: --$OPTARG" >&2
+                    usage
+                    exit 1
+                    ;;
+            esac
+            ;;
+        q)
+            GEN_SCRIPTS_ARGS=("${GEN_SCRIPTS_ARGS[@]}" "--enqueue" )
+            ;;
+        k)
+            export KVM_ACTIVE="true"
+            ;;
+        *)
+            echo "Invalid option: -$OPTARG" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
 
 # This environment variable is used by $CONFIG_FILE
 export OUTPUT_DIR="${OUTPUT_DIR:-$(realpath "$SCRIPT_DIR/../../../results/chats-blocks-sens")}"
@@ -31,4 +58,4 @@ export OUTPUT_DIR="${OUTPUT_DIR:-$(realpath "$SCRIPT_DIR/../../../results/chats-
     exit 1;
 }
 
-"$GEN_SCRIPTS" "${GEN_SCRIPTS_ARGS[@]}" "$@"
+"$GEN_SCRIPTS" "${GEN_SCRIPTS_ARGS[@]}"
