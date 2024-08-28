@@ -34,13 +34,13 @@ sudo make connect
 4. What this connect command is really doing is to start a bash session with a terminal connection to the container, which is only running slurm controller daemon. Additionally, a binding is performed with the containers/results folder. This binding is performed with the /gem5/results folder, so whatever is done here, it is shared with the host machine.
 Inside the gem5 folder, there is a directory called gem5_path that contains all required to run full-system simulations and some scripts that can help the user in many use cases. We created a folder with all the scripts that submit the simulations that give the results shown in the paper. To replicate, for example, the results from the main figures, you can execute the following commands:
 ~~~bash
-cd /gem5/gem5_path/scripts/2023-02.valuepred/
+cd /gem5/gem5_path/scripts/CHATS/
 ./generate-simulations-main --enqueue [-k]
 ~~~
 Note the option ```-k``` which is optional. This option MUST be used in case KVM is not enabled, to run the simulations with atomicSimpleCPU. Else, by default it will use KVM to fast-forward.
 This command will generate a bunch of folders containing the simulation scripts that are executed in batches by slurm. You will be able to find the results from the execution in stats.txt file, along with the simulation configuration used. For example, once the simulation finishes, you can perform the next operations to access the stats file:
 ~~~bash
-cd /gem5/results/valuepred-main/CPUtest_BinSfx.htm.fallbacklock_LV_ED_CRrw_RSL0Ev_RSPrec_L0Repl_L1Repl_RldStale_DwnG_Rtry6_Pflt/stamp.genome/0
+cd /gem5/results/chats-main/CPUtest_BinSfx.htm.fallbacklock_LV_ED_CRrw_RSL0Ev_RSPrec_L0Repl_L1Repl_RldStale_DwnG_Rtry6_Pflt/stamp.genome/0
 less stats.txt
 ~~~
 5. You can check if everything is working by using slurm:
