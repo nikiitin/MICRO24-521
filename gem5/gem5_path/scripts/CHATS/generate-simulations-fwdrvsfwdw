@@ -19,7 +19,7 @@ CONFIG_FILE="$SCRIPT_DIR/config.chats.fwdrvsfwdw.py"
 
 GEN_SCRIPTS="$SCRIPT_DIR/../run-scripts/gem5_gen_scripts.py" 
 GEN_SCRIPTS_ARGS=("--config-file" "$CONFIG_FILE")
-
+export KVM_ACTIVE="false"
 while getopts "kq-:" opt; do
     case "$opt" in
         -)

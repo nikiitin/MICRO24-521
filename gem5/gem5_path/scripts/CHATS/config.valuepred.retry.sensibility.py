@@ -15,6 +15,11 @@ configs_vary(
 configs_vary(
              {cpu_model: "DerivO3CPU"},
 )
+kvm_enabled = os.getenv("KVM_ACTIVE", "False")
+kvm_enabled = True if kvm_enabled.lower() == "true" else False
+configs_vary(
+    {enable_kvm: kvm_enabled},
+)
 configs_vary(
     {work_warmup_active: False}
 )
