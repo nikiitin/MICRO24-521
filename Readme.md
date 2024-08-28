@@ -3,11 +3,13 @@ In this document we explain how to install and deploy containers for MICRO submi
 
 ## Requirements
 - KVM must be enabled in your machine.
-- Docker ver. 27.1.1
-- Docker compose ver. 2.29.1
+- Docker ver. 27.1.1 (Will be installed with build)
+- Docker compose ver. 2.29.1 (Will be installed with build)
 - Ubuntu (for this experiments ver. 20.04 LTS was used)
+- Python ver. 3.8.10
 - Virtualization support (Check in your BIOS)
-- R ver. 4.4.1
+- R ver. 4.4.1 ([instructions to install](https://cran.r-project.org/bin/linux/ubuntu/fullREADME.html))
+- perl 4.4 ([instructions to install](https://ultahost.com/knowledge-base/install-perl-ubuntu/))
 For ease of use and reduced reproducibility complexity, we provided the user with a make file that is automated to easily install almost all these tools.
 
 ## Deploy steps

@@ -3,7 +3,7 @@ usage () {
     echo "Usage: $0 [-k] [-q|--enqueue]"
     echo
     echo "Options:"
-    echo "  -k: Use KVM for the simulations."
+    echo "  -k: Do NOT use KVM for the simulations."
     echo "  -q, --enqueue: Enqueue the generated simulations to slurm."
 }
 
@@ -19,7 +19,7 @@ CONFIG_FILE="$SCRIPT_DIR/config.chats.blocks.sensibility.py"
 
 GEN_SCRIPTS="$SCRIPT_DIR/../run-scripts/gem5_gen_scripts.py" 
 GEN_SCRIPTS_ARGS=("--config-file" "$CONFIG_FILE")
-export KVM_ACTIVE="false"
+export KVM_ACTIVE="true"
 while getopts "kq-:" opt; do
     case "$opt" in
         -)
@@ -38,7 +38,7 @@ while getopts "kq-:" opt; do
             GEN_SCRIPTS_ARGS=("${GEN_SCRIPTS_ARGS[@]}" "--enqueue" )
             ;;
         k)
-            export KVM_ACTIVE="true"
+            export KVM_ACTIVE="false"
             ;;
         *)
             echo "Invalid option: -$OPTARG" >&2
