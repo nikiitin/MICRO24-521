@@ -211,7 +211,7 @@ build: check_kvm_environment check_docker_environment configure_containers confi
 		"gem5 uses KVM to run the simulations with fast-forward." \
 		"all the containers will try to use /dev/kvm device from this host."
 
-build: BUILD_TYPE_VIRT = atomic
+build_atomic: BUILD_TYPE_VIRT = atomic
 build_atomic: check_docker_environment configure_containers configure_dependencies_gem5 build_RING-5
 	@echo "Building all the containers from the compose file..."
 	@echo "This may take a while and a lot of disk space..."
