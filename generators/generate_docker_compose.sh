@@ -10,7 +10,7 @@ CONTAINERS_DIR=..
 TMP_DIR=./tmp_compose
 
 usage_help() {
-  echo "Usage: generate_docker_compose.sh -n <number_of_services> -d <device_name> -w <device_bandwidth>" 1>&2
+  echo "Usage: generate_docker_compose.sh -n <number_of_services> -d <device_name> -w <device_bandwidth> [-k (KVM active)]" 1>&2
   exit 1
 }
 
@@ -28,10 +28,8 @@ copy_to_env() {
 
 # Option for number of services must be provided
 # If no option is provided, print usage and exit
-if [ $# -ne 6 ]; then
-  usage_help
-fi
-while getopts ":n:d:w:" opt; do
+KVM_FLAG=0
+while getopts ":n:d:w:k" opt; do
   case ${opt} in
     n )
       SERVICES=$OPTARG
@@ -52,6 +50,9 @@ while getopts ":n:d:w:" opt; do
           usage_help
           exit 1
       fi
+      ;;
+    k )
+      KVM_FLAG=1
       ;;
     \? )
       usage_help
@@ -86,8 +87,20 @@ for ((i=1; i<=SERVICES; i++)); do
     # Using pipe to escape the forward slash in the device name
     SUBSTITUTE_STRING=$(sed "s|DEVICENAME|${DEVICE}|g" <<< "$SUBSTITUTE_STRING")
     SUBSTITUTE_STRING=$(sed "s/MAXWRITEBANDWIDTH/${DEVICE_BANDWIDTH}/g" <<< "$SUBSTITUTE_STRING")
+    if [ "$KVM_FLAG" -eq 1 ]; then
+      SUBSTITUTE_STRING=$(sed "s|DEVICES_KVM|devices:\n     - \"/dev/kvm:/dev/kvm\"|g" <<< "$SUBSTITUTE_STRING")
+    else
+      SUBSTITUTE_STRING=$(sed "/DEVICES_KVM/d" <<< "$SUBSTITUTE_STRING")
+    fi
     SERVICE_STRING+=$(echo -e "\n$SUBSTITUTE_STRING")
 done
+# Replace the placeholder for kvm devices
+if [ "$KVM_FLAG" -eq 1 ]; then
+  sed -i "s|DEVICES_KVM|devices:\n     - \"/dev/kvm:/dev/kvm\"|g" "$TMP_DIR/docker-compose.yml"
+  sed -i "/DEVICES_KVM/d" "$TMP_DIR/docker-compose.yml"
+else
+  sed -i "/DEVICES_KVM/d" "$TMP_DIR/docker-compose.yml"
+fi
 # Replace the placeholder in the compose file with the service string
 sed -i "/SLURM_COMPUTE_NODES/r /dev/stdin" "$TMP_DIR/docker-compose.yml" <<< "$SERVICE_STRING"
 # Remove the placeholder

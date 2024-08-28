@@ -30,7 +30,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt -y update && apt -y upgrade && \
         apt -y install \
         build-essential \
-        git \
         m4 \
         scons \
         zlib1g \
@@ -39,7 +38,6 @@ RUN apt -y update && apt -y upgrade && \
         protobuf-compiler \
         libprotoc-dev \
         libgoogle-perftools-dev \
-        python3-dev \
         python-is-python3 \
         doxygen \
         libboost-all-dev \
