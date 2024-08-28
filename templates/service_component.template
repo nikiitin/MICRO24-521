@@ -22,9 +22,5 @@
         limits:
           cpus: "1.0"
           memory: 3.5g
-    blkio_config:
-      device_write_bps:
-      - path: /dev/DEVICENAME
-        rate: 'MAXWRITEBANDWIDTH'
     depends_on:
       - "slurmctld"
