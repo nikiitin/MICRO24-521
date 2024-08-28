@@ -1,9 +1,6 @@
 DOCKER_ENGINE_VERSION = 27.1.1
 DOCKER_COMPOSE_VERSION = 2.29.1
 CONTAINERD_VERSION = 1.7.19
-# Will the build use kvm?
-# By default, NO
-BUILD_TYPE_VIRT = atomic
 # Maximum memory per container in kbytes
 # Set to 3.5GiB by default
 # Should not expect to spend more than 3.5GiB to execute
@@ -39,7 +36,6 @@ export M_NUM_SERVICES
 ### KVM ENVIROMENT ###
 check_kvm_environment: kvm_check reduce_paranoid
 	@echo "KVM environment is ready!"
-	BUILD_TYPE_VIRT = kvm
 
 kvm_check: 
 # Check if KVM is installed
@@ -203,6 +199,7 @@ build_RING-5: add_submodules checkout_RING-5_branch
 ### END SUBMODULES ###
 
 ### Objectives for the user ###
+build: BUILD_TYPE_VIRT = kvm
 build: check_kvm_environment check_docker_environment configure_containers configure_dependencies_gem5 build_RING-5
 	@echo "Building all the containers from the compose file..."
 	@echo "This may take a while and a lot of disk space..."
@@ -214,6 +211,7 @@ build: check_kvm_environment check_docker_environment configure_containers confi
 		"gem5 uses KVM to run the simulations with fast-forward." \
 		"all the containers will try to use /dev/kvm device from this host."
 
+build: BUILD_TYPE_VIRT = atomic
 build_atomic: check_docker_environment configure_containers configure_dependencies_gem5 build_RING-5
 	@echo "Building all the containers from the compose file..."
 	@echo "This may take a while and a lot of disk space..."

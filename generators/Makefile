@@ -1,4 +1,3 @@
-KVM_FLAG = ""
 generate_slurm:
 	@echo "Generating slurm configuration files"
 	@echo "Using $(M_NUM_CPUS) CPUs. If you want to " \
@@ -17,10 +16,10 @@ generate_compose:
 		-w "$(MAX_IO_PER_CONTAINER)" \
 		$(KVM_FLAG)
 
-
+generate-kvm: KVM_FLAG = "-k"
 generate_kvm: generate_slurm generate_compose
-	KVM_FLAG = "-k"
 	@echo "All configuration files generated!"
 
+generate-atomic: KVM_FLAG = ""
 generate_atomic: generate_slurm generate_compose
 	@echo "All configuration files generated!"
