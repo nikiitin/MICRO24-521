@@ -4,7 +4,7 @@
 from gem5_run import configs_set, configs_update, configs_vary, Vary, get_benchmarks, update
 from options import *
 import templates
-
+import os
 configs_set(templates.base)
 configs_update(templates.model_final)
 configs_update(templates.htm_cfg2_l0rsetevict)
@@ -100,7 +100,6 @@ configs_update({
     random_seed: Vary(*range(3)),
 })
 
-import os
 output_dir = os.getenv("OUTPUT_DIR")
 if output_dir != None and output_dir != "":
     configs_update({ output_directory_base: os.path.realpath(output_dir) })
