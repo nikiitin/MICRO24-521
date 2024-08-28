@@ -25,6 +25,6 @@
     blkio_config:
       device_write_bps:
       - path: /dev/DEVICENAME
-        rate: 'MAXWRITEBANDWIDTHb'
+        rate: 'MAXWRITEBANDWIDTH'
     depends_on:
       - "slurmctld"
