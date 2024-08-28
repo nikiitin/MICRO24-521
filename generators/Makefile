@@ -16,10 +16,9 @@ generate_compose:
 		-w "$(MAX_IO_PER_CONTAINER)" \
 		$(KVM_FLAG)
 
-generate-kvm: KVM_FLAG = "-k"
-generate_kvm: generate_slurm generate_compose
+generate: generate_slurm generate_compose
 	@echo "All configuration files generated!"
 
-generate-atomic: KVM_FLAG = ""
-generate_atomic: generate_slurm generate_compose
-	@echo "All configuration files generated!"
+generate_kvm: KVM_FLAG = "-k" generate
+
+generate_atomic: KVM_FLAG = "" generate
