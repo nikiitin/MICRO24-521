@@ -14,8 +14,7 @@
       - gem5_path:/gem5
       - ./gem5/dockerfiles/modules:/lib/modules:ro
       - ./results:/gem5/results
-    devices:
-      - "/dev/kvm:/dev/kvm"
+    DEVICES_KVM
     expose:
       - "6818"
     deploy:
@@ -23,9 +22,5 @@
         limits:
           cpus: "1.0"
           memory: 3.5g
-    blkio_config:
-      device_write_bps:
-      - path: /dev/DEVICENAME
-        rate: 'MAXWRITEBANDWIDTHb'
     depends_on:
       - "slurmctld"

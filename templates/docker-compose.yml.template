@@ -46,8 +46,7 @@ services:
       - gem5_path:/gem5
       - ./gem5/dockerfiles/modules:/lib/modules:ro
       - ./results:/gem5/results
-    devices:
-      - "/dev/kvm:/dev/kvm"
+    DEVICES_KVM
     expose:
       - "6817"
     depends_on:

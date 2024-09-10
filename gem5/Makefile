@@ -51,5 +51,5 @@ unpack_modules:
 
 install_dependencies:
 	@echo "Installing dependencies for gem5..."
-	@rsync "$(GEM5_DEPENDENCIES_PATH)/gem5_path/" "./gem5_path/"
+	rsync -r "$(GEM5_DEPENDENCIES_PATH)/gem5_path/" "./gem5_path/"
 	@echo "Dependencies installed!"
